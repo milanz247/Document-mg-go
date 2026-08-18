@@ -80,6 +80,7 @@ Atlas Wiki is a public read-only Markdown knowledge base with a private single-a
 - Sidebar document labels come from Markdown filenames (without the extension), so changing a document heading does not rename its navigation entry.
 - `POST /api/documents`, `PUT /api/document`, and `DELETE /api/document` create, edit, and delete `.md` files only after traversal, extension, parent-directory, and symlink checks.
 - `POST /api/folders` creates one folder beneath an existing `DOCS_ROOT` directory after the same traversal and symlink-boundary checks. Empty folders remain visible in navigation.
+- `DELETE /api/folder` removes authenticated administrator-selected folders only when they are completely empty. Folders containing Markdown, other files, or nested folders are never deleted.
 - New documents may be created only in an existing folder. The application never creates or modifies arbitrary filesystem paths.
 - Markdown raw HTML is disabled. Rendered output is sanitized with DOMPurify before it reaches `v-html`.
 - Relative Markdown links use Vue Router and images are fetched through the read-only asset API.
@@ -91,6 +92,7 @@ Atlas Wiki is a public read-only Markdown knowledge base with a private single-a
 - The Wikipedia-inspired reader and editor support complete persistent light and dark themes.
 - The production Vue application is embedded in the Go executable. A release runs the API and UI from the same address; no separate Node/Vite process is required.
 - Vue Router history fallback is handled by Go, so direct links and browser refreshes continue to work.
+- When `index.md` is absent, `/docs` shows a compact local welcome screen and library counts instead of a 404 response.
 
 ## Run the backend
 

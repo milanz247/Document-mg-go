@@ -72,5 +72,6 @@ export const documentsApi = {
     method: 'POST',
     body: JSON.stringify({ path }),
   }),
+  deleteFolder: (path: string) => request<void>(`/api/folder?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
   delete: (path: string) => request<void>(`/api/document?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
 }

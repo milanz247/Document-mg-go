@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { FolderPlus, LockKeyhole, Menu, Moon, Pencil, Plus, RefreshCw, Search, ShieldCheck, Sun } from '@lucide/vue'
+import { LockKeyhole, Menu, Moon, RefreshCw, Search, ShieldCheck, Sun } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import UnlockEditingDialog from '../auth/UnlockEditingDialog.vue'
 import CreateFolderDialog from '../folders/CreateFolderDialog.vue'
@@ -19,8 +19,9 @@ const searchOpen = ref(false)
 const folderDialogOpen = ref(false)
 const unlockOpen = ref(false)
 const pendingEditorRoute = ref('')
-const currentEditorRoute = computed(() => editorRoute(routeToDocumentPath(route.params.documentPath)))
-const isReaderRoute = computed(() => route.path === '/docs' || route.path.startsWith('/docs/'))
+const currentEditorRoute = computed(() => documents.homeFallback && route.path === '/docs'
+  ? '/editor/new?path=index.md&template=welcome'
+  : editorRoute(routeToDocumentPath(route.params.documentPath)))
 
 function safeInternalPath(value: unknown): value is string {
   return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')
@@ -87,10 +88,12 @@ watch(() => route.query.unlock, (target) => {
 
 onMounted(() => {
   window.addEventListener('keydown', handleSearchShortcut)
+  window.addEventListener('atlas:request-edit', requestEdit)
   window.addEventListener('atlas:open-folder-dialog', openFolderDialog)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleSearchShortcut)
+  window.removeEventListener('atlas:request-edit', requestEdit)
   window.removeEventListener('atlas:open-folder-dialog', openFolderDialog)
 })
 </script>
@@ -137,17 +140,6 @@ onBeforeUnmount(() => {
 
       <div class="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
         <button
-          v-if="isReaderRoute"
-          class="flex h-9 shrink-0 items-center gap-2 border border-[#36c] px-2.5 text-xs font-semibold text-[#36c] transition hover:bg-[#eef3ff] dark:border-[#6ea6ff] dark:text-[#6ea6ff] dark:hover:bg-slate-800 sm:px-3"
-          type="button"
-          title="Edit this document"
-          aria-label="Edit this document"
-          @click="requestEdit"
-        >
-          <Pencil :size="14" />
-          <span class="hidden sm:inline">Edit</span>
-        </button>
-        <button
           class="grid size-9 shrink-0 place-items-center border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-[#36c] disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-[#15181c] dark:hover:text-[#6ea6ff]"
           type="button"
           :disabled="documents.navigationLoading"
@@ -157,19 +149,6 @@ onBeforeUnmount(() => {
         >
           <RefreshCw :size="15" :class="{ 'animate-spin': documents.navigationLoading }" />
         </button>
-        <button
-          v-if="auth.isAuthenticated"
-          class="hidden size-9 shrink-0 place-items-center border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-[#36c] dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-[#15181c] dark:hover:text-[#6ea6ff] md:grid"
-          type="button"
-          title="Create folder"
-          aria-label="Create documentation folder"
-          @click="folderDialogOpen = true"
-        >
-          <FolderPlus :size="15" />
-        </button>
-        <RouterLink v-if="auth.isAuthenticated" class="hidden h-9 items-center gap-2 border border-[#36c] px-3 text-xs font-semibold text-[#36c] hover:bg-[#eef3ff] dark:border-[#6ea6ff] dark:text-[#6ea6ff] dark:hover:bg-slate-800 xl:flex" to="/editor/new">
-          <Plus :size="15" /> New page
-        </RouterLink>
         <span v-if="auth.isAuthenticated" class="hidden items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 2xl:flex">
           <ShieldCheck :size="14" /> Editing unlocked
         </span>

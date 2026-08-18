@@ -29,6 +29,7 @@ var (
 	markdownPunctuationPattern = regexp.MustCompile("[#*_`>\\[\\]()~|]+")
 	ErrInvalidDocument         = errors.New("invalid Markdown document")
 	ErrInvalidSearch           = errors.New("invalid search")
+	ErrFolderNotEmpty          = errors.New("folder is not empty")
 )
 
 type Service struct {
@@ -240,6 +241,26 @@ func (s *Service) CreateFolder(path string) (string, error) {
 		return "", fmt.Errorf("resolve created folder: %w", err)
 	}
 	return filepath.ToSlash(relative), nil
+}
+
+func (s *Service) DeleteFolder(path string) error {
+	if !utf8.ValidString(path) || utf8.RuneCountInString(path) > 240 {
+		return fmt.Errorf("%w: invalid folder path", ErrInvalidDocument)
+	}
+	s.writeMu.Lock()
+	defer s.writeMu.Unlock()
+	target, err := s.root.ResolveExistingDirectory(path)
+	if err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(target)
+	if err != nil {
+		return err
+	}
+	if len(entries) != 0 {
+		return ErrFolderNotEmpty
+	}
+	return os.Remove(target)
 }
 
 func (s *Service) Search(query string, tags []string) ([]SearchResult, error) {

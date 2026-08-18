@@ -148,6 +148,34 @@ func (r *Root) ResolveDirectoryCreateTarget(requested string) (string, error) {
 	return target, nil
 }
 
+// ResolveExistingDirectory resolves a directory that already exists beneath
+// the documentation root. The root itself and all symlink targets are rejected.
+func (r *Root) ResolveExistingDirectory(requested string) (string, error) {
+	cleaned, err := cleanDirectoryRelative(requested)
+	if err != nil {
+		return "", err
+	}
+	candidate, err := filepath.Abs(filepath.Join(r.path, cleaned))
+	if err != nil || !isWithin(r.path, candidate) || candidate == r.path {
+		return "", ErrInvalidPath
+	}
+	realCandidate, err := filepath.EvalSymlinks(candidate)
+	if err != nil {
+		return "", err
+	}
+	if !isWithin(r.path, realCandidate) || realCandidate == r.path || filepath.Clean(realCandidate) != filepath.Clean(candidate) {
+		return "", ErrInvalidPath
+	}
+	info, err := os.Stat(realCandidate)
+	if err != nil {
+		return "", err
+	}
+	if !info.IsDir() {
+		return "", ErrInvalidPath
+	}
+	return realCandidate, nil
+}
+
 func cleanRelative(requested string, allowedExtensions map[string]struct{}) (string, error) {
 	if requested == "" || strings.ContainsRune(requested, '\x00') || strings.Contains(requested, "\\") {
 		return "", ErrInvalidPath

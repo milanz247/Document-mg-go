@@ -1,6 +1,7 @@
 package documents
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strings"
@@ -159,5 +160,20 @@ func TestCreateEmptyFolderAppearsInNavigation(t *testing.T) {
 	}
 	if len(navigation) != 1 || len(navigation[0].Children) != 1 || navigation[0].Children[0].Path != "Engineering/Runbooks" {
 		t.Fatalf("empty folder missing from navigation: %#v", navigation)
+	}
+	if _, err := service.Create("Engineering/Runbooks/keep.md", "# Keep\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.DeleteFolder("Engineering/Runbooks"); !errors.Is(err, ErrFolderNotEmpty) {
+		t.Fatalf("folder containing Markdown deletion returned %v", err)
+	}
+	if err := service.Delete("Engineering/Runbooks/keep.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := service.DeleteFolder("Engineering/Runbooks"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := os.Stat(filepath.Join(rootPath, "Engineering", "Runbooks")); !os.IsNotExist(err) {
+		t.Fatalf("deleted folder still exists: %v", err)
 	}
 }

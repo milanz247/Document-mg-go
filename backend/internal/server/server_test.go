@@ -144,6 +144,18 @@ func TestAuthenticatedDocumentLifecycle(t *testing.T) {
 		t.Fatalf("folder was not created: %v", err)
 	}
 
+	response = jsonRequest(t, client, http.MethodDelete, testServer.URL+"/api/folder?path=Team", nil, session.CSRFToken)
+	if response.StatusCode != http.StatusConflict {
+		t.Fatalf("non-empty folder delete status = %d", response.StatusCode)
+	}
+	response.Body.Close()
+
+	response = jsonRequest(t, client, http.MethodDelete, testServer.URL+"/api/folder?path=Team%2FRunbooks", nil, session.CSRFToken)
+	if response.StatusCode != http.StatusNoContent {
+		t.Fatalf("empty folder delete status = %d", response.StatusCode)
+	}
+	response.Body.Close()
+
 	response = jsonRequest(t, client, http.MethodPut, testServer.URL+"/api/document", map[string]string{
 		"path": "Team/web-created.md", "markdown": "# Updated Online\n",
 	}, session.CSRFToken)

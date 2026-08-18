@@ -68,6 +68,7 @@ func New(documentService *documents.Service, root *securefs.Root, authService *a
 	mux.HandleFunc("GET /api/document", server.document)
 	mux.Handle("POST /api/documents", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.createDocument))))
 	mux.Handle("POST /api/folders", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.createFolder))))
+	mux.Handle("DELETE /api/folder", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.deleteFolder))))
 	mux.Handle("PUT /api/document", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.updateDocument))))
 	mux.Handle("DELETE /api/document", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.deleteDocument))))
 	mux.HandleFunc("GET /api/assets", server.asset)
@@ -189,6 +190,14 @@ func (s *Server) createFolder(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusCreated, map[string]string{"path": path})
 }
 
+func (s *Server) deleteFolder(w http.ResponseWriter, r *http.Request) {
+	if err := s.documents.DeleteFolder(r.URL.Query().Get("path")); err != nil {
+		s.writeFolderMutationError(w, err)
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 func (s *Server) updateDocument(w http.ResponseWriter, r *http.Request) {
 	var request documentWriteRequest
 	if err := decodeJSON(w, r, &request); err != nil {
@@ -300,6 +309,8 @@ func (s *Server) writeFolderMutationError(w http.ResponseWriter, err error) {
 		writeError(w, http.StatusConflict, "A file or folder already exists at that path")
 	case errors.Is(err, os.ErrNotExist):
 		writeError(w, http.StatusNotFound, "Parent folder not found")
+	case errors.Is(err, documents.ErrFolderNotEmpty):
+		writeError(w, http.StatusConflict, "Folder must be empty before it can be deleted")
 	default:
 		s.logger.Error("folder creation failed", "error", err)
 		writeError(w, http.StatusInternalServerError, "Unable to create folder")

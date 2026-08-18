@@ -59,8 +59,12 @@ async function loadEditor(): Promise<void> {
   error.value = ''
   allowNavigation.value = false
   if (isNew.value) {
-    path.value = ''
-    markdown.value = '# Untitled document\n\nStart writing here.\n'
+    const requestedNewPath = typeof route.query.path === 'string' ? normalizePath(route.query.path) : ''
+    const welcomeTemplate = route.query.template === 'welcome'
+    path.value = requestedNewPath
+    markdown.value = welcomeTemplate
+      ? "# Welcome to Milan's Wiki\n\nUse this home page to introduce the documentation workspace, highlight important guides, and help readers find the right information.\n\n## Getting started\n\nChoose a document from **Contents** or use the search bar.\n"
+      : '# Untitled document\n\nStart writing here.\n'
     originalMarkdown.value = markdown.value
     tags.value = []
     originalTags.value = []

@@ -1,9 +1,25 @@
 <script setup lang="ts">
-import { X } from '@lucide/vue'
+import { FolderPlus, Pencil, Plus, ShieldCheck, X } from '@lucide/vue'
+import { useAuthStore } from '../../stores/auth'
 import { useDocumentsStore } from '../../stores/documents'
 import SidebarNode from './SidebarNode.vue'
 
 const documents = useDocumentsStore()
+const auth = useAuthStore()
+
+function requestEdit(): void {
+  documents.sidebarOpen = false
+  window.dispatchEvent(new Event('atlas:request-edit'))
+}
+
+function requestFolder(): void {
+  documents.sidebarOpen = false
+  window.dispatchEvent(new Event('atlas:open-folder-dialog'))
+}
+
+function closeSidebar(): void {
+  documents.sidebarOpen = false
+}
 </script>
 
 <template>
@@ -46,5 +62,27 @@ const documents = useDocumentsStore()
         <SidebarNode v-for="node in documents.navigation" :key="node.path" :node="node" />
       </ul>
     </nav>
+
+    <footer class="border-t border-slate-200 px-3 py-3 dark:border-slate-800" aria-label="Document actions">
+      <div class="mb-2 flex items-center justify-between px-1">
+        <p class="text-[9px] font-bold uppercase tracking-[0.15em] text-slate-400 dark:text-slate-600">Page actions</p>
+        <span v-if="auth.isAuthenticated" class="flex items-center gap-1 text-[9px] font-semibold text-emerald-700 dark:text-emerald-400">
+          <ShieldCheck :size="11" /> Unlocked
+        </span>
+      </div>
+      <button class="flex h-10 w-full items-center gap-2.5 border border-[#36c] px-3 text-left text-xs font-semibold text-[#36c] transition hover:bg-[#eef3ff] dark:border-[#6ea6ff] dark:text-[#6ea6ff] dark:hover:bg-slate-800" type="button" @click="requestEdit">
+        <Pencil :size="15" />
+        <span>Edit current page</span>
+      </button>
+
+      <div v-if="auth.isAuthenticated" class="mt-2 grid grid-cols-2 gap-2">
+        <RouterLink class="flex h-9 items-center justify-center gap-2 bg-[#36c] px-2 text-[11px] font-semibold text-white hover:bg-[#2a4b8d]" to="/editor/new" @click="closeSidebar">
+          <Plus :size="14" /> New page
+        </RouterLink>
+        <button class="flex h-9 items-center justify-center gap-2 border border-slate-300 px-2 text-[11px] font-semibold text-slate-600 hover:bg-slate-50 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" type="button" @click="requestFolder">
+          <FolderPlus :size="14" /> New folder
+        </button>
+      </div>
+    </footer>
   </aside>
 </template>

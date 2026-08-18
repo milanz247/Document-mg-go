@@ -21,6 +21,7 @@ export const useDocumentsStore = defineStore('documents', () => {
   const searchLoading = ref(false)
   const searchError = ref('')
   const sidebarOpen = ref(false)
+  const homeFallback = ref(false)
   const openFolders = ref(new Set(savedFolders()))
   let searchSequence = 0
 
@@ -79,6 +80,12 @@ export const useDocumentsStore = defineStore('documents', () => {
     localStorage.setItem(storageKey, JSON.stringify([...next]))
   }
 
+  function forgetFolder(path: string): void {
+    const next = new Set([...openFolders.value].filter((folder) => folder !== path && !folder.startsWith(`${path}/`)))
+    openFolders.value = next
+    localStorage.setItem(storageKey, JSON.stringify([...next]))
+  }
+
   return {
     navigation,
     navigationLoading,
@@ -87,11 +94,13 @@ export const useDocumentsStore = defineStore('documents', () => {
     searchLoading,
     searchError,
     sidebarOpen,
+    homeFallback,
     openFolders,
     hasNavigation,
     loadNavigation,
     search,
     toggleFolder,
     revealDocument,
+    forgetFolder,
   }
 })
