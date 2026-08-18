@@ -31,6 +31,26 @@ export interface FolderResponse {
   path: string
 }
 
+export interface AssetUpload {
+  path: string
+  markdown: string
+}
+
+export interface Backlink {
+  path: string
+  title: string
+}
+
+export interface BrokenLink {
+  target: string
+  kind: 'document' | 'asset'
+}
+
+export interface DocumentInsights {
+  backlinks: Backlink[]
+  brokenLinks: BrokenLink[]
+}
+
 export interface AuthUser {
   username: string
 }

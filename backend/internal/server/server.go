@@ -52,6 +52,12 @@ type folderCreateRequest struct {
 	Path string `json:"path"`
 }
 
+type moveRequest struct {
+	Source string `json:"source"`
+	Target string `json:"target"`
+	Type   string `json:"type"`
+}
+
 func New(documentService *documents.Service, root *securefs.Root, authService *auth.Service, cookieSecure bool, logger *slog.Logger) http.Handler {
 	server := &Server{
 		documents: documentService, root: root, auth: authService,
@@ -66,11 +72,14 @@ func New(documentService *documents.Service, root *securefs.Root, authService *a
 	mux.HandleFunc("GET /api/navigation", server.navigation)
 	mux.HandleFunc("GET /api/search", server.search)
 	mux.HandleFunc("GET /api/document", server.document)
+	mux.HandleFunc("GET /api/insights", server.insights)
 	mux.Handle("POST /api/documents", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.createDocument))))
 	mux.Handle("POST /api/folders", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.createFolder))))
 	mux.Handle("DELETE /api/folder", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.deleteFolder))))
 	mux.Handle("PUT /api/document", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.updateDocument))))
 	mux.Handle("DELETE /api/document", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.deleteDocument))))
+	mux.Handle("POST /api/move", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.move))))
+	mux.Handle("POST /api/assets/upload", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.uploadAsset))))
 	mux.HandleFunc("GET /api/assets", server.asset)
 	mux.HandleFunc("/api", apiNotFound)
 	mux.HandleFunc("/api/", apiNotFound)
@@ -162,6 +171,15 @@ func (s *Server) search(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, results)
 }
 
+func (s *Server) insights(w http.ResponseWriter, r *http.Request) {
+	insights, err := s.documents.Insights(r.URL.Query().Get("path"))
+	if err != nil {
+		s.writeFileError(w, err, "Document not found")
+		return
+	}
+	writeJSON(w, http.StatusOK, insights)
+}
+
 func (s *Server) createDocument(w http.ResponseWriter, r *http.Request) {
 	var request documentWriteRequest
 	if err := decodeJSON(w, r, &request); err != nil {
@@ -220,8 +238,36 @@ func (s *Server) deleteDocument(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+func (s *Server) move(w http.ResponseWriter, r *http.Request) {
+	var request moveRequest
+	if err := decodeJSON(w, r, &request); err != nil {
+		writeError(w, http.StatusBadRequest, "Invalid request")
+		return
+	}
+	if request.Type == "document" {
+		document, err := s.documents.MoveDocument(request.Source, request.Target)
+		if err != nil { s.writeMutationError(w, err); return }
+		writeJSON(w, http.StatusOK, document)
+		return
+	}
+	if request.Type == "folder" {
+		path, err := s.documents.MoveFolder(request.Source, request.Target)
+		if err != nil { s.writeFolderMutationError(w, err); return }
+		writeJSON(w, http.StatusOK, map[string]string{"path": path})
+		return
+	}
+	writeError(w, http.StatusBadRequest, "Invalid move type")
+}
+
+func (s *Server) uploadAsset(w http.ResponseWriter, r *http.Request) {
+	r.Body = http.MaxBytesReader(w, r.Body, 11<<20)
+	upload, err := s.documents.UploadAsset(r.URL.Query().Get("document"), r.URL.Query().Get("filename"), r.Body)
+	if err != nil { s.writeUploadError(w, err); return }
+	writeJSON(w, http.StatusCreated, upload)
+}
+
 func (s *Server) asset(w http.ResponseWriter, r *http.Request) {
-	allowed := map[string]struct{}{".png": {}, ".jpg": {}, ".jpeg": {}, ".gif": {}, ".webp": {}, ".svg": {}}
+	allowed := documents.AssetExtensions()
 	resolved, err := s.root.ResolveExisting(r.URL.Query().Get("path"), allowed)
 	if err != nil {
 		s.writeFileError(w, err, "Asset not found")
@@ -312,8 +358,22 @@ func (s *Server) writeFolderMutationError(w http.ResponseWriter, err error) {
 	case errors.Is(err, documents.ErrFolderNotEmpty):
 		writeError(w, http.StatusConflict, "Folder must be empty before it can be deleted")
 	default:
-		s.logger.Error("folder creation failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "Unable to create folder")
+		s.logger.Error("folder mutation failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "Unable to update folder")
+	}
+}
+
+func (s *Server) writeUploadError(w http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, securefs.ErrInvalidPath), errors.Is(err, securefs.ErrUnsupportedType), errors.Is(err, documents.ErrInvalidDocument):
+		writeError(w, http.StatusBadRequest, "Invalid, unsupported, or oversized upload")
+	case errors.Is(err, os.ErrExist):
+		writeError(w, http.StatusConflict, "A file with that name already exists")
+	case errors.Is(err, os.ErrNotExist):
+		writeError(w, http.StatusNotFound, "Document or asset folder not found")
+	default:
+		s.logger.Error("asset upload failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "Unable to upload file")
 	}
 }
 

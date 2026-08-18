@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { Bold, CheckSquare, Code2, Eye, FolderPlus, Heading1, Heading2, Heading3, Image, Italic, Link, List, ListOrdered, LoaderCircle, Minus, PenLine, Quote, Save, Strikethrough, Table, Tag, Trash2, X } from '@lucide/vue'
+import { Bold, CheckSquare, Code2, Eye, FolderPlus, Heading1, Heading2, Heading3, Image, Italic, Link, List, ListOrdered, LoaderCircle, Minus, PenLine, Quote, RotateCcw, Save, Strikethrough, Table, Tag, Trash2, UploadCloud, X } from '@lucide/vue'
 import AppHeader from '../components/layout/AppHeader.vue'
 import MarkdownRenderer from '../components/markdown/MarkdownRenderer.vue'
 import { documentsApi } from '../api/client'
@@ -13,6 +13,7 @@ const route = useRoute()
 const router = useRouter()
 const documents = useDocumentsStore()
 const textarea = ref<HTMLTextAreaElement | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 const path = ref('')
 const markdown = ref('')
 const originalMarkdown = ref('')
@@ -25,12 +26,18 @@ const error = ref('')
 const mobilePanel = ref<'write' | 'preview'>('write')
 const showDeleteDialog = ref(false)
 const allowNavigation = ref(false)
+const uploading = ref(false)
+const draftSavedAt = ref('')
+const draftAvailable = ref<{ path: string; markdown: string; tags: string[]; updatedAt: string } | null>(null)
+const editorReady = ref(false)
+let draftTimer: number | undefined
 
 const isNew = computed(() => route.name === 'editor-new')
 const requestedPath = computed(() => routeToDocumentPath(route.params.documentPath))
 const dirty = computed(() => markdown.value !== originalMarkdown.value || tags.value.join('\n') !== originalTags.value.join('\n'))
 const previewPath = computed(() => normalizePath(path.value || 'draft.md'))
 const wordCount = computed(() => markdown.value.trim() ? markdown.value.trim().split(/\s+/u).length : 0)
+const draftKey = computed(() => `atlas-docs-draft:${isNew.value ? `new:${String(route.query.path ?? '')}` : requestedPath.value}`)
 
 function collectFolders(nodes: NavigationNode[]): string[] {
   return nodes.flatMap((node) => node.type === 'folder' ? [node.path, ...collectFolders(node.children ?? [])] : collectFolders(node.children ?? []))
@@ -55,6 +62,8 @@ function handleFolderCreated(event: Event): void {
 }
 
 async function loadEditor(): Promise<void> {
+  editorReady.value = false
+  window.clearTimeout(draftTimer)
   loading.value = true
   error.value = ''
   allowNavigation.value = false
@@ -69,6 +78,8 @@ async function loadEditor(): Promise<void> {
     tags.value = []
     originalTags.value = []
     tagInput.value = ''
+    findDraft()
+    editorReady.value = true
     loading.value = false
     return
   }
@@ -80,11 +91,57 @@ async function loadEditor(): Promise<void> {
     tags.value = [...document.tags]
     originalTags.value = [...document.tags]
     tagInput.value = ''
+    findDraft()
+    editorReady.value = true
   } catch (loadError) {
     error.value = loadError instanceof Error ? loadError.message : 'Unable to load document.'
   } finally {
     loading.value = false
   }
+}
+
+function findDraft(): void {
+  draftAvailable.value = null
+  try {
+    const raw = localStorage.getItem(draftKey.value)
+    if (!raw) return
+    const saved = JSON.parse(raw) as { path?: unknown; markdown?: unknown; tags?: unknown; updatedAt?: unknown }
+    if (typeof saved.path !== 'string' || typeof saved.markdown !== 'string' || !Array.isArray(saved.tags) || typeof saved.updatedAt !== 'string') return
+    const candidate = { path: saved.path, markdown: saved.markdown, tags: saved.tags.filter((tag): tag is string => typeof tag === 'string'), updatedAt: saved.updatedAt }
+    if (candidate.path !== path.value || candidate.markdown !== markdown.value || candidate.tags.join('\n') !== tags.value.join('\n')) draftAvailable.value = candidate
+  } catch {
+    localStorage.removeItem(draftKey.value)
+  }
+}
+
+function restoreDraft(): void {
+  if (!draftAvailable.value) return
+  path.value = draftAvailable.value.path
+  markdown.value = draftAvailable.value.markdown
+  tags.value = [...draftAvailable.value.tags]
+  draftSavedAt.value = draftAvailable.value.updatedAt
+  draftAvailable.value = null
+}
+
+function clearDraft(): void {
+  localStorage.removeItem(draftKey.value)
+  draftAvailable.value = null
+  draftSavedAt.value = ''
+}
+
+function scheduleDraft(): void {
+  if (!editorReady.value || loading.value || !dirty.value) return
+  window.clearTimeout(draftTimer)
+  draftTimer = window.setTimeout(() => {
+    const updatedAt = new Date().toISOString()
+    try {
+      localStorage.setItem(draftKey.value, JSON.stringify({ path: path.value, markdown: markdown.value, tags: tags.value, updatedAt }))
+      draftSavedAt.value = updatedAt
+    } catch {
+      draftSavedAt.value = ''
+      error.value = 'This browser could not save the recovery draft. Save the page manually.'
+    }
+  }, 650)
 }
 
 async function save(): Promise<void> {
@@ -104,6 +161,7 @@ async function save(): Promise<void> {
     tags.value = [...document.tags]
     originalTags.value = [...document.tags]
     path.value = document.path
+    clearDraft()
     await documents.loadNavigation()
     allowNavigation.value = true
     await router.push(documentRoute(document.path))
@@ -157,6 +215,7 @@ async function removeDocument(): Promise<void> {
   error.value = ''
   try {
     await documentsApi.delete(path.value)
+    clearDraft()
     await documents.loadNavigation()
     allowNavigation.value = true
     await router.push('/docs')
@@ -224,6 +283,34 @@ function insertTable(): Promise<void> {
 	return insertBlock('| Column 1 | Column 2 | Column 3 |\n| --- | --- | --- |\n| Value 1 | Value 2 | Value 3 |\n| Value 4 | Value 5 | Value 6 |')
 }
 
+async function uploadFile(file: File): Promise<void> {
+  if (isNew.value) {
+    error.value = 'Publish the page once before uploading files.'
+    return
+  }
+  uploading.value = true
+  error.value = ''
+  try {
+    const uploaded = await documentsApi.upload(path.value, file)
+    await insertAtCursor(`\n${uploaded.markdown}\n`)
+  } catch (uploadError) {
+    error.value = uploadError instanceof Error ? uploadError.message : 'Unable to upload this file.'
+  } finally {
+    uploading.value = false
+    if (fileInput.value) fileInput.value.value = ''
+  }
+}
+
+function chooseFile(event: Event): void {
+  const file = (event.target as HTMLInputElement).files?.[0]
+  if (file) void uploadFile(file)
+}
+
+function dropFile(event: DragEvent): void {
+  const file = event.dataTransfer?.files?.[0]
+  if (file) void uploadFile(file)
+}
+
 async function handleEditorKeydown(event: KeyboardEvent): Promise<void> {
 	const modifier = event.ctrlKey || event.metaKey
 	if (modifier && !event.altKey && event.key.toLowerCase() === 's') {
@@ -251,8 +338,12 @@ onMounted(() => {
   void documents.loadNavigation()
   window.addEventListener('atlas:folder-created', handleFolderCreated)
 })
-onBeforeUnmount(() => window.removeEventListener('atlas:folder-created', handleFolderCreated))
+onBeforeUnmount(() => {
+  window.clearTimeout(draftTimer)
+  window.removeEventListener('atlas:folder-created', handleFolderCreated)
+})
 watch(() => route.fullPath, loadEditor, { immediate: true })
+watch([path, markdown, () => tags.value.join('\n')], scheduleDraft)
 onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm('Discard your unsaved changes?'))
 </script>
 
@@ -266,7 +357,7 @@ onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm
           <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-[#36c] dark:text-[#6ea6ff]">{{ isNew ? 'Create document' : 'Edit document' }}</p>
           <h1 class="wiki-heading mt-1 truncate text-2xl text-slate-950 dark:text-white">{{ isNew ? 'New knowledge page' : path }}</h1>
         </div>
-        <span v-if="dirty" class="text-xs font-medium text-amber-700 dark:text-amber-400">Unsaved changes</span>
+        <span v-if="dirty" class="text-xs font-medium text-amber-700 dark:text-amber-400">{{ draftSavedAt ? 'Draft saved in this browser' : 'Unsaved changes' }}</span>
         <button v-if="!isNew" class="flex h-9 items-center gap-2 border border-rose-300 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30" type="button" @click="showDeleteDialog = true">
           <Trash2 :size="14" /> Delete
         </button>
@@ -278,6 +369,10 @@ onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm
       </div>
 
       <p v-if="error" role="alert" class="mb-4 border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-700 dark:border-rose-900 dark:bg-rose-950/40 dark:text-rose-300">{{ error }}</p>
+      <div v-if="draftAvailable" class="mb-4 flex flex-col gap-3 border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-200 sm:flex-row sm:items-center">
+        <p class="min-w-0 flex-1"><strong>Recovered browser draft available.</strong> It was saved {{ new Date(draftAvailable.updatedAt).toLocaleString() }}.</p>
+        <div class="flex shrink-0 gap-2"><button class="flex h-8 items-center gap-1.5 border border-amber-400 px-3 text-xs font-semibold dark:border-amber-800" type="button" @click="clearDraft"><Trash2 :size="13" /> Discard</button><button class="flex h-8 items-center gap-1.5 bg-amber-800 px-3 text-xs font-semibold text-white" type="button" @click="restoreDraft"><RotateCcw :size="13" /> Restore draft</button></div>
+      </div>
 
       <div v-if="loading" class="grid min-h-[60vh] place-items-center border border-slate-300 bg-white dark:border-slate-700 dark:bg-[#111315]">
         <LoaderCircle :size="22" class="animate-spin text-[#36c] dark:text-[#6ea6ff]" />
@@ -333,6 +428,8 @@ onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm
               <span class="mx-1 h-5 w-px shrink-0 bg-slate-300 dark:bg-slate-700"></span>
               <button class="editor-tool shrink-0" title="Link (Ctrl+K)" type="button" @click="wrapSelection('[', '](https://)', 'link text')"><Link :size="15" /></button>
               <button class="editor-tool shrink-0" title="Image" type="button" @click="wrapSelection('![', '](images/example.png)', 'image description')"><Image :size="15" /></button>
+              <button class="editor-tool shrink-0" title="Upload image or file" type="button" :disabled="uploading" @click="fileInput?.click()"><LoaderCircle v-if="uploading" :size="15" class="animate-spin" /><UploadCloud v-else :size="15" /></button>
+              <input ref="fileInput" class="hidden" type="file" accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.txt,.csv,.json,.yaml,.yml,.zip" @change="chooseFile" />
               <button class="editor-tool shrink-0" title="Bulleted list" type="button" @click="insertLine('- ', 'List item')"><List :size="15" /></button>
               <button class="editor-tool shrink-0" title="Numbered list" type="button" @click="insertLine('1. ', 'List item')"><ListOrdered :size="15" /></button>
               <button class="editor-tool shrink-0" title="Task list" type="button" @click="insertLine('- [ ] ', 'Task item')"><CheckSquare :size="15" /></button>
@@ -342,9 +439,9 @@ onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm
               <button class="editor-tool shrink-0" title="Code block" type="button" @click="wrapSelection('```\n', '\n```', 'code')"><Code2 :size="15" /></button>
               <button class="editor-tool shrink-0" title="Horizontal rule" type="button" @click="insertBlock('---')"><Minus :size="15" /></button>
             </div>
-            <textarea ref="textarea" v-model="markdown" class="min-h-0 flex-1 resize-none bg-white p-5 font-mono text-[14px] leading-6 text-slate-800 outline-none dark:bg-[#0b0d10] dark:text-slate-200" spellcheck="false" aria-label="Markdown editor" @keydown="handleEditorKeydown"></textarea>
+            <textarea ref="textarea" v-model="markdown" class="min-h-0 flex-1 resize-none bg-white p-5 font-mono text-[14px] leading-6 text-slate-800 outline-none dark:bg-[#0b0d10] dark:text-slate-200" spellcheck="false" aria-label="Markdown editor" @keydown="handleEditorKeydown" @dragover.prevent @drop.prevent="dropFile"></textarea>
             <div class="flex h-8 shrink-0 items-center justify-between gap-4 border-t border-slate-200 bg-[#f8f9fa] px-3 font-mono text-[10px] text-slate-400 dark:border-slate-800 dark:bg-[#181a1d] dark:text-slate-500">
-              <span>Markdown</span>
+              <span>{{ uploading ? 'Uploading file...' : draftSavedAt && dirty ? 'Draft autosaved' : 'Markdown' }}</span>
               <span class="hidden truncate lg:block">Ctrl+B Bold · Ctrl+I Italic · Ctrl+K Link · Ctrl+S Save · Ctrl+Alt+T Table</span>
               <span>{{ wordCount }} words · {{ markdown.length }} characters</span>
             </div>

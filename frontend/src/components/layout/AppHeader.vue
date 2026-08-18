@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { LockKeyhole, Menu, Moon, RefreshCw, Search, ShieldCheck, Sun } from '@lucide/vue'
+import { Command, LockKeyhole, Menu, Moon, RefreshCw, Search, ShieldCheck, Sun } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import UnlockEditingDialog from '../auth/UnlockEditingDialog.vue'
 import CreateFolderDialog from '../folders/CreateFolderDialog.vue'
 import SearchOverlay from '../search/SearchOverlay.vue'
+import CommandPalette from '../search/CommandPalette.vue'
 import { useAuthStore } from '../../stores/auth'
 import { useDocumentsStore } from '../../stores/documents'
 import { useThemeStore } from '../../stores/theme'
@@ -16,6 +17,7 @@ const auth = useAuthStore()
 const router = useRouter()
 const route = useRoute()
 const searchOpen = ref(false)
+const commandOpen = ref(false)
 const folderDialogOpen = ref(false)
 const unlockOpen = ref(false)
 const pendingEditorRoute = ref('')
@@ -67,7 +69,19 @@ function handleSearchShortcut(event: KeyboardEvent): void {
   if (event.ctrlKey && event.altKey && event.key.toLowerCase() === 's') {
     event.preventDefault()
     searchOpen.value = true
+    return
   }
+  const target = event.target as HTMLElement | null
+  const isEditingText = target?.matches('input, textarea, [contenteditable="true"]') ?? false
+  if ((event.ctrlKey || event.metaKey) && !event.altKey && event.key.toLowerCase() === 'k' && !isEditingText) {
+    event.preventDefault()
+    commandOpen.value = true
+  }
+}
+
+function openSearch(): void {
+  commandOpen.value = false
+  searchOpen.value = true
 }
 
 function openFolderDialog(): void {
@@ -90,11 +104,13 @@ onMounted(() => {
   window.addEventListener('keydown', handleSearchShortcut)
   window.addEventListener('atlas:request-edit', requestEdit)
   window.addEventListener('atlas:open-folder-dialog', openFolderDialog)
+  window.addEventListener('atlas:open-search', openSearch)
 })
 onBeforeUnmount(() => {
   window.removeEventListener('keydown', handleSearchShortcut)
   window.removeEventListener('atlas:request-edit', requestEdit)
   window.removeEventListener('atlas:open-folder-dialog', openFolderDialog)
+  window.removeEventListener('atlas:open-search', openSearch)
 })
 </script>
 
@@ -139,6 +155,7 @@ onBeforeUnmount(() => {
       </button>
 
       <div class="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
+        <button class="grid size-9 shrink-0 place-items-center border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-[#36c] dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-[#15181c] dark:hover:text-[#6ea6ff]" type="button" title="Command palette (Ctrl+K)" aria-label="Open command palette" @click="commandOpen = true"><Command :size="15" /></button>
         <button
           class="grid size-9 shrink-0 place-items-center border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-[#36c] disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-[#15181c] dark:hover:text-[#6ea6ff]"
           type="button"
@@ -171,6 +188,7 @@ onBeforeUnmount(() => {
   </header>
 
   <SearchOverlay :open="searchOpen" @close="searchOpen = false" />
+  <CommandPalette :open="commandOpen" @close="commandOpen = false" />
   <UnlockEditingDialog :open="unlockOpen" @close="closeUnlock" @unlocked="editingUnlocked" />
   <CreateFolderDialog :open="folderDialogOpen && auth.isAuthenticated" @close="folderDialogOpen = false" />
 </template>

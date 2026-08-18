@@ -1,23 +1,30 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { AlertCircle, ArrowLeft, BookOpen, FileQuestion, Files, FolderTree, PenLine, RefreshCw, Tag } from '@lucide/vue'
+import { AlertCircle, AlertTriangle, ArrowLeft, BookOpen, FileQuestion, Files, FolderTree, Link2, ListTree, PenLine, RefreshCw, Tag } from '@lucide/vue'
 import { ApiError, documentsApi } from '../api/client'
 import DocumentToolbar from '../components/document/DocumentToolbar.vue'
 import MarkdownRenderer from '../components/markdown/MarkdownRenderer.vue'
 import { useDocumentsStore } from '../stores/documents'
-import type { DocumentResponse } from '../types/documents'
-import { routeToDocumentPath } from '../utils/routes'
+import type { DocumentInsights, DocumentResponse } from '../types/documents'
+import { documentRoute, routeToDocumentPath } from '../utils/routes'
+import { headingAnchors } from '../utils/markdown'
 
 const route = useRoute()
 const router = useRouter()
 const documents = useDocumentsStore()
 const document = ref<DocumentResponse | null>(null)
+const insights = ref<DocumentInsights>({ backlinks: [], brokenLinks: [] })
 const loading = ref(true)
 const error = ref('')
 const notFound = ref(false)
 const showWelcome = ref(false)
 const requestedPath = computed(() => routeToDocumentPath(route.params.documentPath))
+const tableOfContents = computed(() => {
+  const headings = document.value?.headings ?? []
+  const anchors = headingAnchors(headings)
+  return headings.map((heading, index) => ({ ...heading, anchor: anchors[index] }))
+})
 
 function reportHomeFallback(active: boolean): void {
   documents.homeFallback = active
@@ -49,10 +56,15 @@ async function loadDocument(): Promise<void> {
   error.value = ''
   notFound.value = false
   showWelcome.value = false
+  insights.value = { backlinks: [], brokenLinks: [] }
   reportHomeFallback(false)
   try {
     document.value = await documentsApi.document(requestedPath.value)
     documents.revealDocument(document.value.path)
+    const insightPath = document.value.path
+    void documentsApi.insights(insightPath).then((result) => {
+      if (document.value?.path === insightPath) insights.value = result
+    }).catch(() => { /* Link analysis is supplemental to the reader. */ })
     window.document.title = `${document.value.title} - Atlas Docs`
   } catch (requestError) {
     document.value = null
@@ -79,7 +91,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-[1040px] px-4 py-3 sm:px-8 sm:py-4 lg:px-10">
+  <div class="mx-auto w-full max-w-[1320px] px-4 py-3 sm:px-8 sm:py-4 lg:px-10">
     <div v-if="loading" class="overflow-hidden bg-white dark:bg-[#0b0d10]">
       <div class="h-12 border-b border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-[#0e1116]"></div>
       <div class="px-6 py-10 sm:px-12 sm:py-14 lg:px-16">
@@ -147,8 +159,33 @@ onBeforeUnmount(() => {
           {{ tag }}
         </span>
       </div>
-      <div class="px-1 py-8 sm:px-3 sm:py-10 lg:px-5 lg:py-12">
-        <MarkdownRenderer :markdown="document.markdown" :document-path="document.path" />
+      <div class="grid gap-10 px-1 py-8 sm:px-3 sm:py-10 lg:px-5 lg:py-12 xl:grid-cols-[minmax(0,1fr)_230px]">
+        <div class="min-w-0">
+          <MarkdownRenderer :markdown="document.markdown" :document-path="document.path" />
+
+          <section v-if="insights.backlinks.length || insights.brokenLinks.length" class="mt-12 grid gap-5 border-t border-slate-200 pt-7 dark:border-slate-800 md:grid-cols-2">
+            <div v-if="insights.backlinks.length">
+              <h2 class="flex items-center gap-2 text-sm font-semibold text-slate-800 dark:text-slate-200"><Link2 :size="15" /> Referenced by</h2>
+              <ul class="mt-3 space-y-2">
+                <li v-for="backlink in insights.backlinks" :key="backlink.path"><RouterLink class="block border-l-2 border-slate-200 pl-3 text-sm text-[#36c] hover:border-[#36c] hover:underline dark:border-slate-700 dark:text-[#6ea6ff]" :to="documentRoute(backlink.path)">{{ backlink.title }}<span class="mt-0.5 block truncate text-[10px] text-slate-400">{{ backlink.path }}</span></RouterLink></li>
+              </ul>
+            </div>
+            <div v-if="insights.brokenLinks.length">
+              <h2 class="flex items-center gap-2 text-sm font-semibold text-amber-800 dark:text-amber-300"><AlertTriangle :size="15" /> Broken references</h2>
+              <ul class="mt-3 space-y-1.5 font-mono text-xs text-amber-800 dark:text-amber-300"><li v-for="item in insights.brokenLinks" :key="`${item.kind}-${item.target}`" class="break-all border border-amber-200 bg-amber-50 px-2.5 py-2 dark:border-amber-900 dark:bg-amber-950/30">{{ item.target }} <span class="font-sans text-[9px] uppercase opacity-60">{{ item.kind }}</span></li></ul>
+            </div>
+          </section>
+        </div>
+
+        <aside v-if="tableOfContents.length" class="hidden xl:block" aria-label="On this page">
+          <div class="sticky top-24 border-l border-slate-200 pl-5 dark:border-slate-800">
+            <p class="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.15em] text-slate-500 dark:text-slate-400"><ListTree :size="13" /> On this page</p>
+            <nav class="mt-3 max-h-[calc(100vh-9rem)] overflow-y-auto pr-2">
+              <a v-for="heading in tableOfContents" :key="heading.anchor" class="block border-l border-transparent py-1.5 text-xs leading-4 text-slate-500 hover:border-[#36c] hover:text-[#36c] dark:text-slate-500 dark:hover:border-[#6ea6ff] dark:hover:text-[#6ea6ff]" :class="heading.level > 2 ? 'pl-4' : 'pl-2'" :href="`#${heading.anchor}`">{{ heading.text }}</a>
+            </nav>
+            <p v-if="insights.brokenLinks.length" class="mt-5 flex items-start gap-2 border border-amber-200 bg-amber-50 p-2.5 text-[11px] leading-4 text-amber-800 dark:border-amber-900 dark:bg-amber-950/30 dark:text-amber-300"><AlertTriangle :size="13" class="mt-0.5 shrink-0" /> {{ insights.brokenLinks.length }} broken {{ insights.brokenLinks.length === 1 ? 'reference' : 'references' }}</p>
+          </div>
+        </aside>
       </div>
     </section>
 

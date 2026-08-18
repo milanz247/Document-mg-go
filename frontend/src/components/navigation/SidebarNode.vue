@@ -1,18 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 import { useRoute } from 'vue-router'
-import { AlertTriangle, ChevronRight, FileText, Folder, FolderOpen, LoaderCircle, Trash2, X } from '@lucide/vue'
+import { AlertTriangle, ArrowRightLeft, ChevronRight, FileText, Folder, FolderOpen, LoaderCircle, Pin, Star, Trash2, X } from '@lucide/vue'
 import { documentsApi } from '../../api/client'
 import { useAuthStore } from '../../stores/auth'
 import { useDocumentsStore } from '../../stores/documents'
 import type { NavigationNode } from '../../types/documents'
 import { documentRoute } from '../../utils/routes'
+import MoveDialog from './MoveDialog.vue'
 
 const props = defineProps<{ node: NavigationNode }>()
 const documents = useDocumentsStore()
 const auth = useAuthStore()
 const route = useRoute()
 const showDeleteDialog = ref(false)
+const showMoveDialog = ref(false)
 const deleting = ref(false)
 const deleteError = ref('')
 const expanded = computed(() => documents.openFolders.has(props.node.path))
@@ -52,6 +54,26 @@ async function deleteFolder(): Promise<void> {
       </button>
       <button
         v-if="auth.isAuthenticated"
+        class="grid size-8 shrink-0 place-items-center text-slate-400 opacity-100 transition hover:bg-slate-100 hover:text-[#36c] focus:opacity-100 dark:text-slate-600 dark:hover:bg-slate-800 dark:hover:text-[#6ea6ff] sm:opacity-0 sm:group-hover/folder:opacity-100"
+        type="button"
+        :aria-label="`Move or rename ${node.name}`"
+        title="Move or rename"
+        @click="showMoveDialog = true"
+      >
+        <ArrowRightLeft :size="13" />
+      </button>
+      <button
+        class="grid size-8 shrink-0 place-items-center transition"
+        :class="documents.isPinned(node.path) ? 'text-[#36c] dark:text-[#6ea6ff]' : 'text-slate-400 opacity-100 hover:text-[#36c] dark:text-slate-600 dark:hover:text-[#6ea6ff] sm:opacity-0 sm:group-hover/folder:opacity-100'"
+        type="button"
+        :aria-label="documents.isPinned(node.path) ? `Unpin ${node.name}` : `Pin ${node.name}`"
+        :title="documents.isPinned(node.path) ? 'Remove custom pin' : 'Pin above alphabetical items'"
+        @click="documents.togglePinned(node.path)"
+      >
+        <Pin :size="13" :fill="documents.isPinned(node.path) ? 'currentColor' : 'none'" />
+      </button>
+      <button
+        v-if="auth.isAuthenticated"
         class="grid size-8 shrink-0 place-items-center text-slate-400 opacity-100 transition hover:bg-rose-50 hover:text-rose-700 focus:opacity-100 dark:text-slate-600 dark:hover:bg-rose-950/30 dark:hover:text-rose-400 sm:opacity-0 sm:group-hover/folder:opacity-100"
         type="button"
         :aria-label="`Delete ${node.name} folder`"
@@ -62,19 +84,23 @@ async function deleteFolder(): Promise<void> {
       </button>
     </div>
 
-    <RouterLink
-      v-else
-      class="tree-row group border-l-2"
-      :class="active ? 'border-[#36c] bg-[#eef3ff] font-semibold text-[#202122] dark:border-[#6ea6ff] dark:bg-[#182235] dark:text-white' : 'border-transparent text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-[#36c] dark:text-slate-500 dark:hover:border-slate-700 dark:hover:bg-[#12161b] dark:hover:text-[#6ea6ff]'"
-      :to="target"
-      :title="node.path"
-      :aria-current="active ? 'page' : undefined"
-      @click="documents.sidebarOpen = false"
-    >
-      <span class="w-[13px] shrink-0"></span>
-      <FileText :size="14" class="shrink-0 text-slate-400 group-hover:text-current dark:text-slate-600" :class="active ? '!text-[#36c] dark:!text-[#6ea6ff]' : ''" />
-      <span class="truncate">{{ node.name }}</span>
-    </RouterLink>
+    <div v-else class="group/document flex min-w-0 items-center">
+      <RouterLink
+        class="tree-row group min-w-0 flex-1 border-l-2"
+        :class="active ? 'border-[#36c] bg-[#eef3ff] font-semibold text-[#202122] dark:border-[#6ea6ff] dark:bg-[#182235] dark:text-white' : 'border-transparent text-slate-600 hover:border-slate-300 hover:bg-slate-50 hover:text-[#36c] dark:text-slate-500 dark:hover:border-slate-700 dark:hover:bg-[#12161b] dark:hover:text-[#6ea6ff]'"
+        :to="target"
+        :title="node.path"
+        :aria-current="active ? 'page' : undefined"
+        @click="documents.sidebarOpen = false"
+      >
+        <span class="w-[13px] shrink-0"></span>
+        <FileText :size="14" class="shrink-0 text-slate-400 group-hover:text-current dark:text-slate-600" :class="active ? '!text-[#36c] dark:!text-[#6ea6ff]' : ''" />
+        <span class="truncate">{{ node.name }}</span>
+      </RouterLink>
+      <button class="grid size-7 shrink-0 place-items-center transition" :class="documents.isFavorite(node.path) ? 'text-amber-500' : 'text-slate-400 opacity-100 hover:text-amber-500 dark:text-slate-600 sm:opacity-0 sm:group-hover/document:opacity-100'" type="button" :aria-label="documents.isFavorite(node.path) ? `Remove ${node.name} from favorites` : `Add ${node.name} to favorites`" title="Favorite" @click="documents.toggleFavorite(node.path)"><Star :size="13" :fill="documents.isFavorite(node.path) ? 'currentColor' : 'none'" /></button>
+      <button class="grid size-7 shrink-0 place-items-center transition" :class="documents.isPinned(node.path) ? 'text-[#36c] dark:text-[#6ea6ff]' : 'text-slate-400 opacity-100 hover:text-[#36c] dark:text-slate-600 sm:opacity-0 sm:group-hover/document:opacity-100'" type="button" :aria-label="documents.isPinned(node.path) ? `Unpin ${node.name}` : `Pin ${node.name}`" title="Pin in custom order" @click="documents.togglePinned(node.path)"><Pin :size="13" :fill="documents.isPinned(node.path) ? 'currentColor' : 'none'" /></button>
+      <button v-if="auth.isAuthenticated" class="grid size-7 shrink-0 place-items-center text-slate-400 opacity-100 transition hover:text-[#36c] dark:text-slate-600 dark:hover:text-[#6ea6ff] sm:opacity-0 sm:group-hover/document:opacity-100" type="button" :aria-label="`Move or rename ${node.name}`" title="Move or rename" @click="showMoveDialog = true"><ArrowRightLeft :size="13" /></button>
+    </div>
 
     <Transition name="folder">
       <ul v-if="node.type === 'folder' && expanded" class="ml-[18px] border-l border-slate-200 pl-1.5 dark:border-slate-800">
@@ -108,5 +134,6 @@ async function deleteFolder(): Promise<void> {
         </section>
       </div>
     </Teleport>
+    <MoveDialog :open="showMoveDialog" :node="node" @close="showMoveDialog = false" />
   </li>
 </template>

@@ -41,8 +41,15 @@ export function resolveDocumentationPath(currentDocument: string, target: string
 
 export function resolveAssetPath(currentDocument: string, target: string): string | null {
   if (/^(?:https?:)?\/\//i.test(target) || target.startsWith('data:')) return target
-  const base = target.startsWith('/') ? [] : currentDocument.split('/').slice(0, -1)
-  const parts = [...base, ...target.replace(/^\//, '').split('/')]
+  const targetPath = target.split(/[?#]/, 1)[0]
+  let decodedTarget: string
+  try {
+    decodedTarget = decodeURIComponent(targetPath)
+  } catch {
+    return null
+  }
+  const base = decodedTarget.startsWith('/') ? [] : currentDocument.split('/').slice(0, -1)
+  const parts = [...base, ...decodedTarget.replace(/^\//, '').split('/')]
   const resolved: string[] = []
   for (const part of parts) {
     if (part === '' || part === '.') continue

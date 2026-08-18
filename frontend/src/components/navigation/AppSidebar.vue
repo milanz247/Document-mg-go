@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { FolderPlus, Pencil, Plus, ShieldCheck, X } from '@lucide/vue'
+import { FolderPlus, Pencil, Plus, ShieldCheck, Star, X } from '@lucide/vue'
 import { useAuthStore } from '../../stores/auth'
 import { useDocumentsStore } from '../../stores/documents'
 import SidebarNode from './SidebarNode.vue'
@@ -58,9 +58,15 @@ function closeSidebar(): void {
       <p v-else-if="!documents.hasNavigation" class="px-3 py-6 text-sm leading-6 text-slate-500 dark:text-slate-400">
         No Markdown files found. Add a <code>.md</code> file to the docs folder, then refresh.
       </p>
-      <ul v-else class="space-y-0.5">
-        <SidebarNode v-for="node in documents.navigation" :key="node.path" :node="node" />
-      </ul>
+      <template v-else>
+        <section v-if="documents.favoriteDocuments.length" class="mb-4 border-b border-slate-200 pb-3 dark:border-slate-800">
+          <p class="mb-1 flex items-center gap-1.5 px-2 text-[9px] font-bold uppercase tracking-[0.14em] text-slate-400 dark:text-slate-600"><Star :size="11" /> Favorites</p>
+          <ul class="space-y-0.5"><SidebarNode v-for="node in documents.favoriteDocuments" :key="`favorite-${node.path}`" :node="node" /></ul>
+        </section>
+        <ul class="space-y-0.5">
+          <SidebarNode v-for="node in documents.displayNavigation" :key="node.path" :node="node" />
+        </ul>
+      </template>
     </nav>
 
     <footer class="border-t border-slate-200 px-3 py-3 dark:border-slate-800" aria-label="Document actions">

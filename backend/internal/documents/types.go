@@ -28,3 +28,23 @@ type Heading struct {
 	Level int    `json:"level"`
 	Text  string `json:"text"`
 }
+
+type AssetUpload struct {
+	Path     string `json:"path"`
+	Markdown string `json:"markdown"`
+}
+
+type Backlink struct {
+	Path  string `json:"path"`
+	Title string `json:"title"`
+}
+
+type BrokenLink struct {
+	Target string `json:"target"`
+	Kind   string `json:"kind"`
+}
+
+type Insights struct {
+	Backlinks   []Backlink   `json:"backlinks"`
+	BrokenLinks []BrokenLink `json:"brokenLinks"`
+}

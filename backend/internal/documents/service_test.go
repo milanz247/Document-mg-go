@@ -177,3 +177,43 @@ func TestCreateEmptyFolderAppearsInNavigation(t *testing.T) {
 		t.Fatalf("deleted folder still exists: %v", err)
 	}
 }
+
+func TestMoveDocumentAndFolder(t *testing.T) {
+	rootPath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(rootPath, "Engineering", "Drafts"), 0o755); err != nil { t.Fatal(err) }
+	if err := os.WriteFile(filepath.Join(rootPath, "Engineering", "Drafts", "runbook.md"), []byte("# Runbook\n"), 0o600); err != nil { t.Fatal(err) }
+	root, err := securefs.NewRoot(rootPath)
+	if err != nil { t.Fatal(err) }
+	service := NewService(root)
+
+	moved, err := service.MoveDocument("Engineering/Drafts/runbook.md", "Engineering/Drafts/operations.md")
+	if err != nil || moved.Path != "Engineering/Drafts/operations.md" { t.Fatalf("move document returned %#v, %v", moved, err) }
+	path, err := service.MoveFolder("Engineering/Drafts", "Engineering/Runbooks")
+	if err != nil || path != "Engineering/Runbooks" { t.Fatalf("move folder returned %q, %v", path, err) }
+	if _, err := service.Read("Engineering/Runbooks/operations.md"); err != nil { t.Fatal(err) }
+	if _, err := service.Read("Engineering/Drafts/runbook.md"); !os.IsNotExist(err) { t.Fatalf("old document still resolves: %v", err) }
+}
+
+func TestUploadAssetAndDocumentInsights(t *testing.T) {
+	rootPath := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(rootPath, "Guides"), 0o755); err != nil { t.Fatal(err) }
+	if err := os.MkdirAll(filepath.Join(rootPath, "References"), 0o755); err != nil { t.Fatal(err) }
+	files := map[string]string{
+		filepath.Join("Guides", "main.md"): "# Main\n\n[Missing page](missing.md)\n\n![Missing image](assets/missing.png)\n",
+		filepath.Join("References", "links.md"): "# Links\n\nSee [Main](../Guides/main.md).\n",
+	}
+	for path, content := range files {
+		if err := os.WriteFile(filepath.Join(rootPath, path), []byte(content), 0o600); err != nil { t.Fatal(err) }
+	}
+	root, err := securefs.NewRoot(rootPath)
+	if err != nil { t.Fatal(err) }
+	service := NewService(root)
+
+	upload, err := service.UploadAsset("Guides/main.md", "diagram.png", strings.NewReader("image bytes"))
+	if err != nil { t.Fatal(err) }
+	if upload.Path != "Guides/assets/diagram.png" || upload.Markdown != "![diagram](assets/diagram.png)" { t.Fatalf("unexpected upload: %#v", upload) }
+	insights, err := service.Insights("Guides/main.md")
+	if err != nil { t.Fatal(err) }
+	if len(insights.Backlinks) != 1 || insights.Backlinks[0].Path != "References/links.md" { t.Fatalf("unexpected backlinks: %#v", insights.Backlinks) }
+	if len(insights.BrokenLinks) != 2 { t.Fatalf("unexpected broken links: %#v", insights.BrokenLinks) }
+}

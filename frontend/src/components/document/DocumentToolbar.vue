@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Check, ChevronRight, Copy, FileText, RefreshCw } from '@lucide/vue'
+import { Check, ChevronRight, Copy, FileText, RefreshCw, Star } from '@lucide/vue'
+import { useDocumentsStore } from '../../stores/documents'
 
 const props = defineProps<{ path: string; refreshing?: boolean }>()
 const emit = defineEmits<{ refresh: [] }>()
+const documents = useDocumentsStore()
 const copied = ref(false)
 const segments = computed(() => props.path.replace(/\.md$/i, '').split('/'))
 
@@ -31,6 +33,10 @@ async function copyLink(): Promise<void> {
     </div>
 
     <div class="ml-auto flex items-center gap-1.5">
+      <button class="document-action" type="button" :aria-label="documents.isFavorite(path) ? 'Remove from favorites' : 'Add to favorites'" @click="documents.toggleFavorite(path)">
+        <Star :size="14" :fill="documents.isFavorite(path) ? 'currentColor' : 'none'" :class="documents.isFavorite(path) ? 'text-amber-500' : ''" />
+        <span class="hidden sm:inline">{{ documents.isFavorite(path) ? 'Favorited' : 'Favorite' }}</span>
+      </button>
       <button class="document-action" type="button" :aria-label="copied ? 'Link copied' : 'Copy document link'" @click="copyLink">
         <Check v-if="copied" :size="14" class="text-emerald-600" />
         <Copy v-else :size="14" />

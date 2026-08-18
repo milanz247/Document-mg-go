@@ -48,7 +48,7 @@ function escapeHtml(value: string): string {
   })[character] ?? character)
 }
 
-function slugify(value: string): string {
+export function slugifyHeading(value: string): string {
   return value
     .toLowerCase()
     .trim()
@@ -56,6 +56,16 @@ function slugify(value: string): string {
     .replace(/[^\p{L}\p{N}\s-]/gu, '')
     .replace(/\s+/g, '-')
     .replace(/-+/g, '-')
+}
+
+export function headingAnchors(headings: Array<{ text: string }>): string[] {
+  const counts = new Map<string, number>()
+  return headings.map((heading) => {
+    const base = slugifyHeading(heading.text) || 'section'
+    const count = counts.get(base) ?? 0
+    counts.set(base, count + 1)
+    return count === 0 ? base : `${base}-${count}`
+  })
 }
 
 export function renderMarkdown(markdown: string, documentPath: string): string {
@@ -90,7 +100,7 @@ export function renderMarkdown(markdown: string, documentPath: string): string {
   md.renderer.rules.heading_open = (tokens, index) => {
     const level = tokens[index].tag
     const content = tokens[index + 1]?.content ?? ''
-    const baseSlug = slugify(content) || 'section'
+    const baseSlug = slugifyHeading(content) || 'section'
     const count = headingCounts.get(baseSlug) ?? 0
     headingCounts.set(baseSlug, count + 1)
     const slug = count === 0 ? baseSlug : `${baseSlug}-${count}`
@@ -115,6 +125,13 @@ export function renderMarkdown(markdown: string, documentPath: string): string {
       if (internalRoute) {
         token.attrs![hrefIndex][1] = internalRoute
         token.attrSet('data-doc-link', 'true')
+      } else if (/\.(?:png|jpe?g|gif|webp|svg|pdf|txt|csv|json|ya?ml|zip)(?:[?#].*)?$/i.test(href)) {
+        const assetRoute = resolveAssetPath(documentPath, href)
+        if (assetRoute) {
+          token.attrs![hrefIndex][1] = assetRoute
+          token.attrSet('target', '_blank')
+          token.attrSet('rel', 'noopener noreferrer')
+        }
       } else if (/^https?:\/\//i.test(href)) {
         token.attrSet('target', '_blank')
         token.attrSet('rel', 'noopener noreferrer')

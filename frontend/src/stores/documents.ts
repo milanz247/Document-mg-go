@@ -4,13 +4,20 @@ import { documentsApi } from '../api/client'
 import type { NavigationNode, SearchResult } from '../types/documents'
 
 const storageKey = 'atlas-docs-open-folders'
+const favoritesKey = 'atlas-docs-favorites'
+const pinnedKey = 'atlas-docs-pinned'
 
-function savedFolders(): string[] {
+function savedList(key: string): string[] {
   try {
-    return JSON.parse(localStorage.getItem(storageKey) ?? '[]') as string[]
+    const value = JSON.parse(localStorage.getItem(key) ?? '[]') as unknown
+    return Array.isArray(value) ? value.filter((item): item is string => typeof item === 'string') : []
   } catch {
     return []
   }
+}
+
+function flattenDocuments(nodes: NavigationNode[]): NavigationNode[] {
+  return nodes.flatMap((node) => node.type === 'document' ? [node] : flattenDocuments(node.children ?? []))
 }
 
 export const useDocumentsStore = defineStore('documents', () => {
@@ -22,10 +29,32 @@ export const useDocumentsStore = defineStore('documents', () => {
   const searchError = ref('')
   const sidebarOpen = ref(false)
   const homeFallback = ref(false)
-  const openFolders = ref(new Set(savedFolders()))
+  const openFolders = ref(new Set(savedList(storageKey)))
+  const favorites = ref(savedList(favoritesKey))
+  const pinned = ref(savedList(pinnedKey))
   let searchSequence = 0
 
   const hasNavigation = computed(() => navigation.value.length > 0)
+  const allDocuments = computed(() => flattenDocuments(navigation.value))
+  const favoriteDocuments = computed(() => favorites.value
+    .map((path) => allDocuments.value.find((node) => node.path === path))
+    .filter((node): node is NavigationNode => Boolean(node)))
+  const displayNavigation = computed(() => {
+    const pinOrder = new Map(pinned.value.map((path, index) => [path, index]))
+    const order = (nodes: NavigationNode[]): NavigationNode[] => [...nodes]
+      .map((node) => ({ ...node, children: node.children ? order(node.children) : undefined }))
+      .sort((left, right) => {
+        const leftPin = pinOrder.get(left.path)
+        const rightPin = pinOrder.get(right.path)
+        if (leftPin !== undefined || rightPin !== undefined) {
+          if (leftPin === undefined) return 1
+          if (rightPin === undefined) return -1
+          return leftPin - rightPin
+        }
+        return left.name.localeCompare(right.name)
+      })
+    return order(navigation.value)
+  })
 
   async function loadNavigation(): Promise<void> {
     navigationLoading.value = true
@@ -86,6 +115,30 @@ export const useDocumentsStore = defineStore('documents', () => {
     localStorage.setItem(storageKey, JSON.stringify([...next]))
   }
 
+  function toggleFavorite(path: string): void {
+    favorites.value = favorites.value.includes(path)
+      ? favorites.value.filter((item) => item !== path)
+      : [path, ...favorites.value]
+    localStorage.setItem(favoritesKey, JSON.stringify(favorites.value))
+  }
+
+  function togglePinned(path: string): void {
+    pinned.value = pinned.value.includes(path)
+      ? pinned.value.filter((item) => item !== path)
+      : [...pinned.value, path]
+    localStorage.setItem(pinnedKey, JSON.stringify(pinned.value))
+  }
+
+  function remapPath(source: string, target: string): void {
+    const remap = (path: string) => path === source ? target : path.startsWith(`${source}/`) ? `${target}${path.slice(source.length)}` : path
+    favorites.value = favorites.value.map(remap)
+    pinned.value = pinned.value.map(remap)
+    openFolders.value = new Set([...openFolders.value].map(remap))
+    localStorage.setItem(favoritesKey, JSON.stringify(favorites.value))
+    localStorage.setItem(pinnedKey, JSON.stringify(pinned.value))
+    localStorage.setItem(storageKey, JSON.stringify([...openFolders.value]))
+  }
+
   return {
     navigation,
     navigationLoading,
@@ -97,10 +150,17 @@ export const useDocumentsStore = defineStore('documents', () => {
     homeFallback,
     openFolders,
     hasNavigation,
+    displayNavigation,
+    favoriteDocuments,
     loadNavigation,
     search,
     toggleFolder,
     revealDocument,
     forgetFolder,
+    toggleFavorite,
+    isFavorite: (path: string) => favorites.value.includes(path),
+    togglePinned,
+    isPinned: (path: string) => pinned.value.includes(path),
+    remapPath,
   }
 })
