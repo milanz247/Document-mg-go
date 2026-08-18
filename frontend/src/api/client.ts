@@ -44,11 +44,11 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 
 export const authApi = {
   me: () => request<AuthSession>('/api/auth/me'),
-  login: (username: string, password: string) => request<AuthSession>('/api/auth/login', {
+  unlock: (password: string) => request<AuthSession>('/api/auth/unlock', {
     method: 'POST',
-    body: JSON.stringify({ username, password }),
+    body: JSON.stringify({ password }),
   }),
-  logout: () => request<void>('/api/auth/logout', { method: 'POST' }),
+  lock: () => request<void>('/api/auth/lock', { method: 'POST' }),
 }
 
 export const documentsApi = {

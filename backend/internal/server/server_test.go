@@ -23,6 +23,9 @@ func TestAuthenticatedDocumentLifecycle(t *testing.T) {
 	if err := os.Mkdir(filepath.Join(docsRoot, "Team"), 0o755); err != nil {
 		t.Fatal(err)
 	}
+	if err := os.WriteFile(filepath.Join(docsRoot, "Team", "public.md"), []byte("# Public Guide\n\nReadable without unlocking.\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
 	root, err := securefs.NewRoot(docsRoot)
 	if err != nil {
 		t.Fatal(err)
@@ -46,16 +49,50 @@ func TestAuthenticatedDocumentLifecycle(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if response.StatusCode != http.StatusUnauthorized {
+	if response.StatusCode != http.StatusOK {
 		t.Fatalf("unauthenticated navigation status = %d", response.StatusCode)
 	}
 	response.Body.Close()
 
-	response = jsonRequest(t, client, http.MethodPost, testServer.URL+"/api/auth/login", map[string]string{
-		"username": "admin", "password": "a-strong-test-password",
+	response, err = client.Get(testServer.URL + "/api/document?path=Team%2Fpublic.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("unauthenticated document status = %d", response.StatusCode)
+	}
+	response.Body.Close()
+
+	response, err = client.Get(testServer.URL + "/api/search?q=readable")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if response.StatusCode != http.StatusOK {
+		t.Fatalf("unauthenticated search status = %d", response.StatusCode)
+	}
+	response.Body.Close()
+
+	response = jsonRequest(t, client, http.MethodPost, testServer.URL+"/api/documents", map[string]any{
+		"path": "Team/blocked.md", "markdown": "# Must authenticate\n",
+	}, "")
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("unauthenticated create status = %d", response.StatusCode)
+	}
+	response.Body.Close()
+
+	response = jsonRequest(t, client, http.MethodPost, testServer.URL+"/api/auth/unlock", map[string]string{
+		"password": "wrong-password",
+	}, "")
+	if response.StatusCode != http.StatusUnauthorized {
+		t.Fatalf("invalid unlock status = %d", response.StatusCode)
+	}
+	response.Body.Close()
+
+	response = jsonRequest(t, client, http.MethodPost, testServer.URL+"/api/auth/unlock", map[string]string{
+		"password": "a-strong-test-password",
 	}, "")
 	if response.StatusCode != http.StatusOK {
-		t.Fatalf("login status = %d", response.StatusCode)
+		t.Fatalf("unlock status = %d", response.StatusCode)
 	}
 	var session auth.Session
 	if err := json.NewDecoder(response.Body).Decode(&session); err != nil {

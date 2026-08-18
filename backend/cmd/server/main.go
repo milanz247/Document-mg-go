@@ -29,7 +29,7 @@ func main() {
 		logger.Error("documentation root failed", "error", err)
 		os.Exit(1)
 	}
-	authService, err := auth.Open(configuration.DatabasePath, configuration.AdminUsername, configuration.AdminPassword, configuration.SessionDuration)
+	authService, err := auth.Open(configuration.DatabasePath, "editor", configuration.AdminPassword, configuration.SessionDuration)
 	if err != nil {
 		logger.Error("authentication setup failed", "error", err)
 		os.Exit(1)

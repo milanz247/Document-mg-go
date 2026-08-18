@@ -11,18 +11,18 @@ type attempt struct {
 	blockedUntil time.Time
 }
 
-type LoginLimiter struct {
+type UnlockLimiter struct {
 	mu       sync.Mutex
 	attempts map[string]attempt
 	limit    int
 	window   time.Duration
 }
 
-func NewLoginLimiter(limit int, window time.Duration) *LoginLimiter {
-	return &LoginLimiter{attempts: make(map[string]attempt), limit: limit, window: window}
+func NewUnlockLimiter(limit int, window time.Duration) *UnlockLimiter {
+	return &UnlockLimiter{attempts: make(map[string]attempt), limit: limit, window: window}
 }
 
-func (l *LoginLimiter) Allow(key string, now time.Time) bool {
+func (l *UnlockLimiter) Allow(key string, now time.Time) bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	entry := l.attempts[key]
@@ -35,7 +35,7 @@ func (l *LoginLimiter) Allow(key string, now time.Time) bool {
 	return true
 }
 
-func (l *LoginLimiter) Failure(key string, now time.Time) {
+func (l *UnlockLimiter) Failure(key string, now time.Time) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	entry := l.attempts[key]
@@ -49,7 +49,7 @@ func (l *LoginLimiter) Failure(key string, now time.Time) {
 	l.attempts[key] = entry
 }
 
-func (l *LoginLimiter) Success(key string) {
+func (l *UnlockLimiter) Success(key string) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	delete(l.attempts, key)

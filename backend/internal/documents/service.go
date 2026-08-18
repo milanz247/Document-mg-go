@@ -88,7 +88,8 @@ func (s *Service) scanDirectory(directory, relativeDirectory string) ([]Navigati
 		}
 		document := documentFromSource(filepath.ToSlash(relativePath), source)
 		nodes = append(nodes, NavigationNode{
-			Name: document.Title, Type: "document", Path: document.Path, Tags: document.Tags,
+			Name: strings.TrimSuffix(entry.Name(), filepath.Ext(entry.Name())),
+			Type: "document", Path: document.Path, Tags: document.Tags,
 		})
 	}
 

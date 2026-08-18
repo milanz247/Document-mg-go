@@ -14,7 +14,6 @@ type Config struct {
 	Address         string
 	DocsRoot        string
 	DatabasePath    string
-	AdminUsername   string
 	AdminPassword   string
 	CookieSecure    bool
 	SessionDuration time.Duration
@@ -89,16 +88,10 @@ func Load() (Config, error) {
 		}
 	}
 
-	adminUsername := os.Getenv("ADMIN_USERNAME")
-	if adminUsername == "" {
-		adminUsername = "admin"
-	}
-
 	return Config{
 		Address:         address,
 		DocsRoot:        absRoot,
 		DatabasePath:    filepath.Join(absDataDir, "atlas.db"),
-		AdminUsername:   adminUsername,
 		AdminPassword:   os.Getenv("ADMIN_PASSWORD"),
 		CookieSecure:    cookieSecure,
 		SessionDuration: sessionDuration,

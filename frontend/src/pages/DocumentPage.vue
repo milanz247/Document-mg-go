@@ -42,7 +42,7 @@ onBeforeUnmount(() => window.removeEventListener('atlas:refresh-document', loadD
 </script>
 
 <template>
-  <div class="mx-auto w-full max-w-[1120px] px-5 py-3 sm:px-9 sm:py-4 lg:px-12 lg:py-4">
+  <div class="mx-auto w-full max-w-[1040px] px-4 py-3 sm:px-8 sm:py-4 lg:px-10">
     <div v-if="loading" class="overflow-hidden bg-white dark:bg-[#0b0d10]">
       <div class="h-12 border-b border-slate-200 bg-slate-50/60 dark:border-slate-800 dark:bg-[#0e1116]"></div>
       <div class="px-6 py-10 sm:px-12 sm:py-14 lg:px-16">
@@ -85,7 +85,7 @@ onBeforeUnmount(() => window.removeEventListener('atlas:refresh-document', loadD
           {{ tag }}
         </span>
       </div>
-      <div class="py-8 sm:py-10 lg:py-11">
+      <div class="px-1 py-8 sm:px-3 sm:py-10 lg:px-5 lg:py-12">
         <MarkdownRenderer :markdown="document.markdown" :document-path="document.path" />
       </div>
     </section>

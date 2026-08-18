@@ -1,6 +1,6 @@
 # Atlas Wiki
 
-Atlas Wiki is a private, single-administrator Markdown knowledge base. Documents remain ordinary files under `DOCS_ROOT`; the web editor creates, updates, and deletes those files directly. SQLite contains only the administrator and sessions—never Markdown content.
+Atlas Wiki is a public read-only Markdown knowledge base with a private single-administrator editor. Documents remain ordinary files under `DOCS_ROOT`; the authenticated web editor creates, updates, and deletes those files directly. SQLite contains only the administrator and sessions—never Markdown content.
 
 ## Project structure
 
@@ -13,7 +13,7 @@ Atlas Wiki is a private, single-administrator Markdown knowledge base. Documents
 │   ├── cmd/
 │   │   └── server/main.go                 # process startup and graceful shutdown
 │   ├── internal/
-│   │   ├── auth/                           # bcrypt admin, SQLite sessions, login limiter
+│   │   ├── auth/                           # bcrypt admin, SQLite sessions, unlock limiter
 │   │   ├── config/config.go               # DOCS_ROOT and server configuration
 │   │   ├── documents/
 │   │   │   ├── service.go                 # scan, read, create, update, and delete
@@ -28,6 +28,7 @@ Atlas Wiki is a private, single-administrator Markdown knowledge base. Documents
 │   ├── src/
 │   │   ├── api/client.ts                  # typed API client
 │   │   ├── components/
+│   │   │   ├── auth/UnlockEditingDialog.vue # password-only editing unlock modal
 │   │   │   ├── document/DocumentToolbar.vue # location and document actions
 │   │   │   ├── layout/AppHeader.vue       # sticky application header
 │   │   │   ├── markdown/MarkdownRenderer.vue
@@ -38,7 +39,6 @@ Atlas Wiki is a private, single-administrator Markdown knowledge base. Documents
 │   │   ├── pages/
 │   │   │   ├── DocumentPage.vue
 │   │   │   ├── EditorPage.vue             # Markdown composer and live preview
-│   │   │   ├── LoginPage.vue
 │   │   │   └── NotFoundPage.vue
 │   │   ├── router/index.ts                # history routes for documents
 │   │   ├── stores/
@@ -73,15 +73,16 @@ Atlas Wiki is a private, single-administrator Markdown knowledge base. Documents
 
 ## Important behavior
 
-- The first administrator is created from `ADMIN_USERNAME` and `ADMIN_PASSWORD`; the password is stored only as a bcrypt hash.
-- Authentication uses expiring server-side SQLite sessions and an HttpOnly, SameSite=Strict cookie. Mutations require a per-session CSRF header, and repeated failed logins are rate-limited.
-- All navigation, document, asset, and mutation APIs require authentication. Only health and login are public.
+- The editing secret is created from `ADMIN_PASSWORD` on first startup and is stored only as a bcrypt hash.
+- Editing unlock uses expiring server-side SQLite sessions and an HttpOnly, SameSite=Strict cookie. Mutations require a per-session CSRF header, and repeated failed password attempts are rate-limited.
+- Navigation, search, documents, and supported image assets are public and read-only. Every create, update, delete, and folder operation requires administrator authentication and CSRF protection.
 - `GET /api/navigation` recursively scans `DOCS_ROOT`, includes only Markdown files, sorts folders before documents, and never follows symlink entries.
+- Sidebar document labels come from Markdown filenames (without the extension), so changing a document heading does not rename its navigation entry.
 - `POST /api/documents`, `PUT /api/document`, and `DELETE /api/document` create, edit, and delete `.md` files only after traversal, extension, parent-directory, and symlink checks.
 - `POST /api/folders` creates one folder beneath an existing `DOCS_ROOT` directory after the same traversal and symlink-boundary checks. Empty folders remain visible in navigation.
 - New documents may be created only in an existing folder. The application never creates or modifies arbitrary filesystem paths.
 - Markdown raw HTML is disabled. Rendered output is sanitized with DOMPurify before it reaches `v-html`.
-- Relative Markdown links use Vue Router and images are fetched through the authenticated asset API.
+- Relative Markdown links use Vue Router and images are fetched through the read-only asset API.
 - The editor provides heading levels, tables, links, images, ordered/bulleted/task lists, quotes, code blocks, horizontal rules, strike-through, live sanitized preview, word counts, unsaved-change protection, responsive write/preview tabs, publishing, editing, and confirmed deletion.
 - Editor shortcuts include `Ctrl+B` for bold, `Ctrl+I` for italic, `Ctrl+K` for links, `Ctrl+S` to save, and `Ctrl+Alt+T` to insert a table.
 - Full-text search covers titles, headings, tags, paths, and Markdown body content. Search results are ranked and include a short matching excerpt.
@@ -99,7 +100,6 @@ From the repository root:
 
 ```powershell
 cd backend
-$env:ADMIN_USERNAME = "admin"
 $env:ADMIN_PASSWORD = "choose-a-password-with-12-or-more-characters"
 go run ./cmd/server
 ```
@@ -130,7 +130,7 @@ Open `http://localhost:5173`. Vite proxies `/api` to the Go server, so no develo
 
 ## Create and edit documents
 
-Sign in at `http://localhost:5173/login`. Use **New page** to open the composer, enter a path inside an existing folder such as `Networking/dns.md`, write Markdown, check the live preview, and publish. Every save is immediately written to the corresponding filesystem file.
+Readers can open `http://localhost:5173/docs` without signing in. Clicking **Edit** opens a password-only security modal; the correct administrator password unlocks that document's editor and all management controls for the session. Without an unlocked session, create, update, delete, and folder requests are rejected. Once editing is unlocked, use **New page** to open the composer, enter a path inside an existing folder such as `Networking/dns.md`, write Markdown, check the live preview, and publish. Every save is immediately written to the corresponding filesystem file.
 
 The filesystem remains interoperable. You may still add a document manually:
 

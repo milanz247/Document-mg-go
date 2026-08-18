@@ -73,6 +73,13 @@ func TestFrontMatterTagsAndSearch(t *testing.T) {
 	if len(document.Tags) != 2 || document.Tags[0] != "postgresql" || document.Tags[1] != "production" {
 		t.Fatalf("unexpected tags: %#v", document.Tags)
 	}
+	navigation, err := service.Navigation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(navigation) != 1 || len(navigation[0].Children) != 1 || navigation[0].Children[0].Name != "database" {
+		t.Fatalf("navigation did not use the filename: %#v", navigation)
+	}
 
 	results, err := service.Search("encrypted backup", []string{"production"})
 	if err != nil {

@@ -18,7 +18,7 @@ import (
 )
 
 var (
-	ErrInvalidCredentials = errors.New("invalid credentials")
+	ErrInvalidPassword    = errors.New("invalid password")
 	ErrUnauthenticated    = errors.New("authentication required")
 	ErrInvalidCSRF        = errors.New("invalid CSRF token")
 )
@@ -108,7 +108,7 @@ func (s *Service) bootstrap(username, password string) error {
 
 	username = strings.TrimSpace(username)
 	if username == "" {
-		return errors.New("ADMIN_USERNAME is required for initial setup")
+		return errors.New("internal editor identity is required for initial setup")
 	}
 	if len(password) < 12 {
 		return errors.New("ADMIN_PASSWORD must contain at least 12 characters for initial setup")
@@ -123,19 +123,19 @@ func (s *Service) bootstrap(username, password string) error {
 	return nil
 }
 
-func (s *Service) Login(ctx context.Context, username, password string) (Session, error) {
+func (s *Service) Unlock(ctx context.Context, password string) (Session, error) {
 	var user User
 	var passwordHash string
-	err := s.db.QueryRowContext(ctx, `SELECT id, username, password_hash FROM users WHERE username = ?`, strings.TrimSpace(username)).Scan(&user.ID, &user.Username, &passwordHash)
+	err := s.db.QueryRowContext(ctx, `SELECT id, username, password_hash FROM users ORDER BY id LIMIT 1`).Scan(&user.ID, &user.Username, &passwordHash)
 	if errors.Is(err, sql.ErrNoRows) {
 		_ = bcrypt.CompareHashAndPassword(s.dummyHash, []byte(password))
-		return Session{}, ErrInvalidCredentials
+		return Session{}, ErrInvalidPassword
 	}
 	if err != nil {
 		return Session{}, fmt.Errorf("read administrator: %w", err)
 	}
 	if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(password)); err != nil {
-		return Session{}, ErrInvalidCredentials
+		return Session{}, ErrInvalidPassword
 	}
 
 	return s.createSession(ctx, user)
@@ -183,7 +183,7 @@ func (s *Service) Authenticate(ctx context.Context, token string) (Session, erro
 	return session, nil
 }
 
-func (s *Service) Logout(ctx context.Context, token string) error {
+func (s *Service) Lock(ctx context.Context, token string) error {
 	if token == "" {
 		return nil
 	}

@@ -24,10 +24,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function login(username: string, password: string): Promise<void> {
+  async function unlock(password: string): Promise<void> {
     loading.value = true
     try {
-      const session = await authApi.login(username, password)
+      const session = await authApi.unlock(password)
       user.value = session.user
       setCSRFToken(session.csrfToken)
       initialized.value = true
@@ -36,9 +36,9 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function logout(): Promise<void> {
+  async function lock(): Promise<void> {
     try {
-      await authApi.logout()
+      await authApi.lock()
     } finally {
       user.value = null
       setCSRFToken('')
@@ -52,5 +52,5 @@ export const useAuthStore = defineStore('auth', () => {
     initialized.value = true
   }
 
-  return { user, initialized, loading, isAuthenticated, initialize, login, logout, clear }
+  return { user, initialized, loading, isAuthenticated, initialize, unlock, lock, clear }
 })

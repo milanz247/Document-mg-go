@@ -33,13 +33,12 @@ type Server struct {
 	documents    *documents.Service
 	root         *securefs.Root
 	auth         *auth.Service
-	loginLimiter *auth.LoginLimiter
+	unlockLimiter *auth.UnlockLimiter
 	cookieSecure bool
 	logger       *slog.Logger
 }
 
-type credentialsRequest struct {
-	Username string `json:"username"`
+type unlockRequest struct {
 	Password string `json:"password"`
 }
 
@@ -56,22 +55,22 @@ type folderCreateRequest struct {
 func New(documentService *documents.Service, root *securefs.Root, authService *auth.Service, cookieSecure bool, logger *slog.Logger) http.Handler {
 	server := &Server{
 		documents: documentService, root: root, auth: authService,
-		loginLimiter: auth.NewLoginLimiter(5, 15*time.Minute),
+		unlockLimiter: auth.NewUnlockLimiter(5, 15*time.Minute),
 		cookieSecure: cookieSecure, logger: logger,
 	}
 	mux := http.NewServeMux()
 	mux.HandleFunc("GET /api/health", server.health)
-	mux.HandleFunc("POST /api/auth/login", server.login)
+	mux.HandleFunc("POST /api/auth/unlock", server.unlock)
 	mux.Handle("GET /api/auth/me", server.requireAuth(http.HandlerFunc(server.me)))
-	mux.Handle("POST /api/auth/logout", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.logout))))
-	mux.Handle("GET /api/navigation", server.requireAuth(http.HandlerFunc(server.navigation)))
-	mux.Handle("GET /api/search", server.requireAuth(http.HandlerFunc(server.search)))
-	mux.Handle("GET /api/document", server.requireAuth(http.HandlerFunc(server.document)))
+	mux.Handle("POST /api/auth/lock", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.lock))))
+	mux.HandleFunc("GET /api/navigation", server.navigation)
+	mux.HandleFunc("GET /api/search", server.search)
+	mux.HandleFunc("GET /api/document", server.document)
 	mux.Handle("POST /api/documents", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.createDocument))))
 	mux.Handle("POST /api/folders", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.createFolder))))
 	mux.Handle("PUT /api/document", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.updateDocument))))
 	mux.Handle("DELETE /api/document", server.requireAuth(server.requireCSRF(http.HandlerFunc(server.deleteDocument))))
-	mux.Handle("GET /api/assets", server.requireAuth(http.HandlerFunc(server.asset)))
+	mux.HandleFunc("GET /api/assets", server.asset)
 	mux.HandleFunc("/api", apiNotFound)
 	mux.HandleFunc("/api/", apiNotFound)
 	mux.Handle("/", webui.Handler())
@@ -86,30 +85,30 @@ func (s *Server) health(w http.ResponseWriter, _ *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-func (s *Server) login(w http.ResponseWriter, r *http.Request) {
+func (s *Server) unlock(w http.ResponseWriter, r *http.Request) {
 	clientKey := clientIP(r)
-	if !s.loginLimiter.Allow(clientKey, time.Now()) {
-		writeError(w, http.StatusTooManyRequests, "Too many login attempts. Try again later.")
+	if !s.unlockLimiter.Allow(clientKey, time.Now()) {
+		writeError(w, http.StatusTooManyRequests, "Too many unlock attempts. Try again later.")
 		return
 	}
 
-	var request credentialsRequest
+	var request unlockRequest
 	if err := decodeJSON(w, r, &request); err != nil {
 		writeError(w, http.StatusBadRequest, "Invalid request")
 		return
 	}
-	session, err := s.auth.Login(r.Context(), request.Username, request.Password)
-	if errors.Is(err, auth.ErrInvalidCredentials) {
-		s.loginLimiter.Failure(clientKey, time.Now())
-		writeError(w, http.StatusUnauthorized, "Invalid username or password")
+	session, err := s.auth.Unlock(r.Context(), request.Password)
+	if errors.Is(err, auth.ErrInvalidPassword) {
+		s.unlockLimiter.Failure(clientKey, time.Now())
+		writeError(w, http.StatusUnauthorized, "Invalid password")
 		return
 	}
 	if err != nil {
-		s.logger.Error("login failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "Unable to sign in")
+		s.logger.Error("editing unlock failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "Unable to unlock editing")
 		return
 	}
-	s.loginLimiter.Success(clientKey)
+	s.unlockLimiter.Success(clientKey)
 	s.setSessionCookie(w, session.Token, session.ExpiresAt)
 	writeJSON(w, http.StatusOK, session)
 }
@@ -118,11 +117,11 @@ func (s *Server) me(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, sessionFromContext(r.Context()))
 }
 
-func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
+func (s *Server) lock(w http.ResponseWriter, r *http.Request) {
 	session := sessionFromContext(r.Context())
-	if err := s.auth.Logout(r.Context(), session.Token); err != nil {
-		s.logger.Error("logout failed", "error", err)
-		writeError(w, http.StatusInternalServerError, "Unable to sign out")
+	if err := s.auth.Lock(r.Context(), session.Token); err != nil {
+		s.logger.Error("editing lock failed", "error", err)
+		writeError(w, http.StatusInternalServerError, "Unable to lock editing")
 		return
 	}
 	s.clearSessionCookie(w)

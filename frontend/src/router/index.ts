@@ -1,20 +1,26 @@
 import { createRouter, createWebHistory } from 'vue-router'
+import type { RouteLocationNormalized } from 'vue-router'
 import DocumentationLayout from '../layouts/DocumentationLayout.vue'
 import DocumentPage from '../pages/DocumentPage.vue'
 import EditorPage from '../pages/EditorPage.vue'
-import LoginPage from '../pages/LoginPage.vue'
 import NotFoundPage from '../pages/NotFoundPage.vue'
 import { useAuthStore } from '../stores/auth'
+import { documentRoute, routeToDocumentPath } from '../utils/routes'
+
+function unlockRedirect(to: RouteLocationNormalized) {
+  const readerPath = to.name === 'editor-edit'
+    ? documentRoute(routeToDocumentPath(to.params.documentPath))
+    : '/docs'
+  return { path: readerPath, query: { unlock: to.fullPath } }
+}
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', redirect: '/docs' },
-    { path: '/login', name: 'login', component: LoginPage },
     {
       path: '/docs',
       component: DocumentationLayout,
-      meta: { requiresAuth: true },
       children: [
         { path: '', component: DocumentPage },
         { path: ':documentPath(.*)', component: DocumentPage },
@@ -34,16 +40,16 @@ const router = createRouter({
 
 router.beforeEach(async (to) => {
   const auth = useAuthStore()
+  const requiresAuth = to.matched.some((record) => record.meta.requiresAuth)
   try {
     await auth.initialize()
   } catch {
-    if (to.name !== 'login') return { name: 'login' }
+    if (requiresAuth) return unlockRedirect(to)
   }
 
-  if (to.meta.requiresAuth && !auth.isAuthenticated) {
-    return { name: 'login', query: { redirect: to.fullPath } }
+  if (requiresAuth && !auth.isAuthenticated) {
+    return unlockRedirect(to)
   }
-  if (to.name === 'login' && auth.isAuthenticated) return '/docs'
   return true
 })
 

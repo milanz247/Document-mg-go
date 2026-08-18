@@ -1,23 +1,60 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
-import { FolderPlus, LogOut, Menu, Moon, Plus, RefreshCw, Search, Sun, UserRound } from '@lucide/vue'
-import { useRouter } from 'vue-router'
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { FolderPlus, LockKeyhole, Menu, Moon, Pencil, Plus, RefreshCw, Search, ShieldCheck, Sun } from '@lucide/vue'
+import { useRoute, useRouter } from 'vue-router'
+import UnlockEditingDialog from '../auth/UnlockEditingDialog.vue'
 import CreateFolderDialog from '../folders/CreateFolderDialog.vue'
 import SearchOverlay from '../search/SearchOverlay.vue'
 import { useAuthStore } from '../../stores/auth'
 import { useDocumentsStore } from '../../stores/documents'
 import { useThemeStore } from '../../stores/theme'
+import { editorRoute, routeToDocumentPath } from '../../utils/routes'
 
 const documents = useDocumentsStore()
 const theme = useThemeStore()
 const auth = useAuthStore()
 const router = useRouter()
+const route = useRoute()
 const searchOpen = ref(false)
 const folderDialogOpen = ref(false)
+const unlockOpen = ref(false)
+const pendingEditorRoute = ref('')
+const currentEditorRoute = computed(() => editorRoute(routeToDocumentPath(route.params.documentPath)))
+const isReaderRoute = computed(() => route.path === '/docs' || route.path.startsWith('/docs/'))
 
-async function logout(): Promise<void> {
-  await auth.logout()
-  await router.push('/login')
+function safeInternalPath(value: unknown): value is string {
+  return typeof value === 'string' && value.startsWith('/') && !value.startsWith('//')
+}
+
+async function requestEdit(): Promise<void> {
+  if (auth.isAuthenticated) {
+    await router.push(currentEditorRoute.value)
+    return
+  }
+  pendingEditorRoute.value = currentEditorRoute.value
+  unlockOpen.value = true
+}
+
+async function editingUnlocked(): Promise<void> {
+  const target = safeInternalPath(pendingEditorRoute.value) ? pendingEditorRoute.value : currentEditorRoute.value
+  unlockOpen.value = false
+  pendingEditorRoute.value = ''
+  await router.push(target)
+}
+
+async function closeUnlock(): Promise<void> {
+  unlockOpen.value = false
+  pendingEditorRoute.value = ''
+  if (route.query.unlock !== undefined) {
+    const query = { ...route.query }
+    delete query.unlock
+    await router.replace({ path: route.path, query, hash: route.hash })
+  }
+}
+
+async function lockEditing(): Promise<void> {
+  await auth.lock()
+  await router.push('/docs')
 }
 
 async function refreshDocumentation(): Promise<void> {
@@ -33,8 +70,20 @@ function handleSearchShortcut(event: KeyboardEvent): void {
 }
 
 function openFolderDialog(): void {
-  folderDialogOpen.value = true
+  if (auth.isAuthenticated) {
+    folderDialogOpen.value = true
+  }
 }
+
+watch(() => route.query.unlock, (target) => {
+  if (!safeInternalPath(target)) return
+  pendingEditorRoute.value = target
+  if (auth.isAuthenticated) {
+    void router.replace(target)
+  } else {
+    unlockOpen.value = true
+  }
+}, { immediate: true })
 
 onMounted(() => {
   window.addEventListener('keydown', handleSearchShortcut)
@@ -61,11 +110,11 @@ onBeforeUnmount(() => {
 
         <RouterLink class="group flex min-w-0 items-center gap-3" to="/docs">
           <span class="wiki-mark grid size-9 shrink-0 place-items-center border border-slate-900 bg-white text-xl text-slate-950 dark:border-slate-300 dark:bg-[#0b0d10] dark:text-white sm:size-10 sm:text-2xl">
-            A
+            M
           </span>
           <span class="hidden min-w-0 sm:block">
-            <span class="wiki-wordmark block truncate text-[17px] leading-5 tracking-wide text-slate-950 dark:text-white">Atlas Wiki</span>
-            <span class="hidden truncate text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-500 md:block">Technical knowledge base</span>
+            <span class="wiki-wordmark block truncate text-[17px] leading-5 tracking-wide text-slate-950 dark:text-white">Milan's Wiki</span>
+            <!-- <span class="hidden truncate text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-500 md:block">Technical knowledge base</span> -->
           </span>
         </RouterLink>
       </div>
@@ -88,6 +137,17 @@ onBeforeUnmount(() => {
 
       <div class="flex min-w-0 items-center justify-end gap-2 sm:gap-3">
         <button
+          v-if="isReaderRoute"
+          class="flex h-9 shrink-0 items-center gap-2 border border-[#36c] px-2.5 text-xs font-semibold text-[#36c] transition hover:bg-[#eef3ff] dark:border-[#6ea6ff] dark:text-[#6ea6ff] dark:hover:bg-slate-800 sm:px-3"
+          type="button"
+          title="Edit this document"
+          aria-label="Edit this document"
+          @click="requestEdit"
+        >
+          <Pencil :size="14" />
+          <span class="hidden sm:inline">Edit</span>
+        </button>
+        <button
           class="grid size-9 shrink-0 place-items-center border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-[#36c] disabled:cursor-wait disabled:opacity-60 dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-[#15181c] dark:hover:text-[#6ea6ff]"
           type="button"
           :disabled="documents.navigationLoading"
@@ -98,6 +158,7 @@ onBeforeUnmount(() => {
           <RefreshCw :size="15" :class="{ 'animate-spin': documents.navigationLoading }" />
         </button>
         <button
+          v-if="auth.isAuthenticated"
           class="hidden size-9 shrink-0 place-items-center border border-slate-200 text-slate-500 transition hover:border-slate-300 hover:bg-slate-50 hover:text-[#36c] dark:border-slate-700 dark:text-slate-400 dark:hover:border-slate-600 dark:hover:bg-[#15181c] dark:hover:text-[#6ea6ff] md:grid"
           type="button"
           title="Create folder"
@@ -106,13 +167,13 @@ onBeforeUnmount(() => {
         >
           <FolderPlus :size="15" />
         </button>
-        <RouterLink class="hidden h-9 items-center gap-2 border border-[#36c] px-3 text-xs font-semibold text-[#36c] hover:bg-[#eef3ff] dark:border-[#6ea6ff] dark:text-[#6ea6ff] dark:hover:bg-slate-800 xl:flex" to="/editor/new">
+        <RouterLink v-if="auth.isAuthenticated" class="hidden h-9 items-center gap-2 border border-[#36c] px-3 text-xs font-semibold text-[#36c] hover:bg-[#eef3ff] dark:border-[#6ea6ff] dark:text-[#6ea6ff] dark:hover:bg-slate-800 xl:flex" to="/editor/new">
           <Plus :size="15" /> New page
         </RouterLink>
-        <span class="hidden items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 2xl:flex">
-          <UserRound :size="14" /> {{ auth.user?.username }}
+        <span v-if="auth.isAuthenticated" class="hidden items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 2xl:flex">
+          <ShieldCheck :size="14" /> Editing unlocked
         </span>
-        <span class="hidden h-5 w-px bg-slate-300 dark:bg-slate-700 xl:block"></span>
+        <span v-if="auth.isAuthenticated" class="hidden h-5 w-px bg-slate-300 dark:bg-slate-700 xl:block"></span>
         <button
           class="grid size-9 shrink-0 place-items-center border border-slate-200 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           type="button"
@@ -123,13 +184,14 @@ onBeforeUnmount(() => {
           <Sun v-if="theme.theme === 'dark'" :size="17" />
           <Moon v-else :size="17" />
         </button>
-        <button class="grid size-9 shrink-0 place-items-center border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" type="button" title="Sign out" aria-label="Sign out" @click="logout">
-          <LogOut :size="16" />
+        <button v-if="auth.isAuthenticated" class="grid size-9 shrink-0 place-items-center border border-slate-200 text-slate-600 hover:bg-slate-100 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" type="button" title="Lock editing" aria-label="Lock editing" @click="lockEditing">
+          <LockKeyhole :size="16" />
         </button>
       </div>
     </div>
   </header>
 
   <SearchOverlay :open="searchOpen" @close="searchOpen = false" />
-  <CreateFolderDialog :open="folderDialogOpen" @close="folderDialogOpen = false" />
+  <UnlockEditingDialog :open="unlockOpen" @close="closeUnlock" @unlocked="editingUnlocked" />
+  <CreateFolderDialog :open="folderDialogOpen && auth.isAuthenticated" @close="folderDialogOpen = false" />
 </template>

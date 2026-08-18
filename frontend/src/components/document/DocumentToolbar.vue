@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { Check, ChevronRight, Copy, FileText, Pencil, RefreshCw } from '@lucide/vue'
-import { editorRoute } from '../../utils/routes'
+import { Check, ChevronRight, Copy, FileText, RefreshCw } from '@lucide/vue'
 
 const props = defineProps<{ path: string; refreshing?: boolean }>()
 const emit = defineEmits<{ refresh: [] }>()
@@ -20,7 +19,7 @@ async function copyLink(): Promise<void> {
 </script>
 
 <template>
-  <div class="flex min-h-12 flex-wrap items-center gap-3 border-b border-slate-300 px-1 py-1.5 dark:border-slate-700">
+  <div class="flex min-h-11 flex-wrap items-center gap-3 border-b border-slate-200 bg-slate-50/60 px-3 py-1.5 dark:border-slate-800 dark:bg-[#0e1116]">
     <div class="flex min-w-0 flex-1 items-center text-xs font-medium text-slate-400 dark:text-slate-500" aria-label="Document location">
       <span class="mr-1.5 grid size-6 shrink-0 place-items-center text-slate-500 dark:text-slate-400">
         <FileText :size="14" />
@@ -32,10 +31,6 @@ async function copyLink(): Promise<void> {
     </div>
 
     <div class="ml-auto flex items-center gap-1.5">
-      <RouterLink class="document-action" :to="editorRoute(path)">
-        <Pencil :size="14" />
-        <span class="hidden sm:inline">Edit</span>
-      </RouterLink>
       <button class="document-action" type="button" :aria-label="copied ? 'Link copied' : 'Copy document link'" @click="copyLink">
         <Check v-if="copied" :size="14" class="text-emerald-600" />
         <Copy v-else :size="14" />

@@ -8,17 +8,17 @@ import (
 	"time"
 )
 
-func TestLoginSessionAndLogout(t *testing.T) {
+func TestUnlockSessionAndLock(t *testing.T) {
 	service, err := Open(filepath.Join(t.TempDir(), "auth.db"), "admin", "a-strong-test-password", time.Hour)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer service.Close()
 
-	if _, err := service.Login(context.Background(), "admin", "wrong-password"); !errors.Is(err, ErrInvalidCredentials) {
-		t.Fatalf("invalid login returned %v", err)
+	if _, err := service.Unlock(context.Background(), "wrong-password"); !errors.Is(err, ErrInvalidPassword) {
+		t.Fatalf("invalid unlock returned %v", err)
 	}
-	session, err := service.Login(context.Background(), "admin", "a-strong-test-password")
+	session, err := service.Unlock(context.Background(), "a-strong-test-password")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -36,7 +36,7 @@ func TestLoginSessionAndLogout(t *testing.T) {
 	if err != nil || authenticated.User.Username != "admin" {
 		t.Fatalf("authenticate returned %#v, %v", authenticated, err)
 	}
-	if err := service.Logout(context.Background(), session.Token); err != nil {
+	if err := service.Lock(context.Background(), session.Token); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := service.Authenticate(context.Background(), session.Token); !errors.Is(err, ErrUnauthenticated) {
