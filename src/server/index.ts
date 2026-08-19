@@ -220,6 +220,19 @@ async function start(): Promise<void> {
     logger: { level: logLevel },
   })
   await app.listen({ host, port })
+
+  let closing = false
+  const shutdown = (signal: NodeJS.Signals) => {
+    if (closing) return
+    closing = true
+    app.log.info({ signal }, 'Shutting down Atlas Wiki')
+    void app.close().catch((error) => {
+      app.log.error(error)
+      process.exitCode = 1
+    })
+  }
+  process.once('SIGINT', shutdown)
+  process.once('SIGTERM', shutdown)
 }
 
 function requireEditingSession(

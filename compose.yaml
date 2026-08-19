@@ -1,0 +1,28 @@
+services:
+  atlas-wiki:
+    build:
+      context: .
+      target: runtime
+    image: ${ATLAS_IMAGE:-atlas-wiki:latest}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 15s
+    ports:
+      - "${PUBLISH_ADDRESS:-127.0.0.1}:${PUBLISH_PORT:-8000}:8000"
+    environment:
+      HOST: 0.0.0.0
+      PORT: 8000
+      DATABASE_PATH: /app/data/atlas.sqlite
+      BACKUP_DIR: /app/backups
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SESSION_DURATION_HOURS: ${SESSION_DURATION_HOURS:-12}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
+      LOG_LEVEL: ${LOG_LEVEL:-warn}
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    security_opt:
+      - no-new-privileges:true

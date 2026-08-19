@@ -21,6 +21,19 @@ The production application is bundled into `dist/server.cjs`. The writable
 database remains separate at `data/atlas.sqlite`, so rebuilding the application
 does not overwrite wiki content.
 
+## Docker
+
+The repository includes a multi-stage `Dockerfile`, `compose.yaml`, persistent
+`data` and `backups` mounts, a health check, and a verified SQLite backup
+command. See [DEPLOYMENT.md](DEPLOYMENT.md) for the complete server deployment,
+backup, restore, and update procedure.
+
+Create a local backup with:
+
+```powershell
+npm.cmd run backup
+```
+
 ## Development
 
 Run these in separate terminals:
