@@ -1,8 +1,9 @@
-backend/bin/
-backend/docs-portal
-backend/docs-portal.exe
-frontend/node_modules/
-frontend/dist/
-release/
+/node_modules
+/dist
+/.tmp
+/src/generated/assets.ts
+/data/*.sqlite
+/data/*.sqlite-shm
+/data/*.sqlite-wal
 .env
-data/
+npm-debug.log
