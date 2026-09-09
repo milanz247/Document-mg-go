@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { onBeforeRouteLeave, useRoute, useRouter } from 'vue-router'
-import { Bold, CheckSquare, Code2, Eye, FolderPlus, Heading1, Heading2, Heading3, Image, Italic, Link, List, ListOrdered, LoaderCircle, Minus, PenLine, Quote, RotateCcw, Save, Strikethrough, Table, Tag, Trash2, UploadCloud, X } from '@lucide/vue'
+import { Bold, CheckSquare, Code2, Eye, FolderPlus, Heading1, Heading2, Heading3, History, Image, Italic, Link, List, ListOrdered, LoaderCircle, Minus, PenLine, Quote, RotateCcw, Save, Strikethrough, Table, Tag, Trash2, UploadCloud, X } from '@lucide/vue'
 import AppHeader from '../components/layout/AppHeader.vue'
 import MarkdownRenderer from '../components/markdown/MarkdownRenderer.vue'
 import { documentsApi } from '../api/client'
 import { useDocumentsStore } from '../stores/documents'
-import type { NavigationNode } from '../types/documents'
+import type { NavigationNode, Revision } from '../types/documents'
 import { documentRoute, routeToDocumentPath } from '../utils/routes'
 
 const route = useRoute()
@@ -19,18 +19,24 @@ const markdown = ref('')
 const originalMarkdown = ref('')
 const tags = ref<string[]>([])
 const originalTags = ref<string[]>([])
+const documentVersion = ref(0)
 const tagInput = ref('')
 const loading = ref(true)
 const saving = ref(false)
+const autosaving = ref(false)
 const error = ref('')
 const mobilePanel = ref<'write' | 'preview'>('write')
 const showDeleteDialog = ref(false)
+const showHistory = ref(false)
+const revisions = ref<Revision[]>([])
 const allowNavigation = ref(false)
 const uploading = ref(false)
 const draftSavedAt = ref('')
+const serverSavedAt = ref('')
 const draftAvailable = ref<{ path: string; markdown: string; tags: string[]; updatedAt: string } | null>(null)
 const editorReady = ref(false)
 let draftTimer: number | undefined
+let autosaveTimer: number | undefined
 
 const isNew = computed(() => route.name === 'editor-new')
 const requestedPath = computed(() => routeToDocumentPath(route.params.documentPath))
@@ -72,11 +78,12 @@ async function loadEditor(): Promise<void> {
     const welcomeTemplate = route.query.template === 'welcome'
     path.value = requestedNewPath
     markdown.value = welcomeTemplate
-      ? "# Welcome to Milan's Wiki\n\nUse this home page to introduce the documentation workspace, highlight important guides, and help readers find the right information.\n\n## Getting started\n\nChoose a document from **Contents** or use the search bar.\n"
+      ? "# Welcome to Atlas Wiki\n\nUse this home page to introduce the documentation workspace, highlight important guides, and help readers find the right information.\n\n## Getting started\n\nChoose a document from **Contents** or use the search bar.\n"
       : '# Untitled document\n\nStart writing here.\n'
     originalMarkdown.value = markdown.value
     tags.value = []
     originalTags.value = []
+    documentVersion.value = 0
     tagInput.value = ''
     findDraft()
     editorReady.value = true
@@ -90,6 +97,7 @@ async function loadEditor(): Promise<void> {
     originalMarkdown.value = document.markdown
     tags.value = [...document.tags]
     originalTags.value = [...document.tags]
+    documentVersion.value = document.version
     tagInput.value = ''
     findDraft()
     editorReady.value = true
@@ -145,7 +153,8 @@ function scheduleDraft(): void {
 }
 
 async function save(): Promise<void> {
-	if (saving.value || loading.value) return
+	if (saving.value || autosaving.value || loading.value) return
+  window.clearTimeout(autosaveTimer)
   error.value = ''
   const normalizedPath = normalizePath(path.value)
   if (!normalizedPath || normalizedPath.split('/').some((segment) => segment === '..' || segment === '')) {
@@ -156,11 +165,12 @@ async function save(): Promise<void> {
   try {
     const document = isNew.value
       ? await documentsApi.create(normalizedPath, markdown.value, tags.value)
-      : await documentsApi.update(normalizedPath, markdown.value, tags.value)
+      : await documentsApi.update(normalizedPath, markdown.value, tags.value, documentVersion.value)
     originalMarkdown.value = document.markdown
     tags.value = [...document.tags]
     originalTags.value = [...document.tags]
     path.value = document.path
+    documentVersion.value = document.version
     clearDraft()
     await documents.loadNavigation()
     allowNavigation.value = true
@@ -222,6 +232,61 @@ async function removeDocument(): Promise<void> {
   } catch (deleteError) {
     error.value = deleteError instanceof Error ? deleteError.message : 'Unable to delete document.'
     showDeleteDialog.value = false
+  } finally {
+    saving.value = false
+  }
+}
+
+function scheduleServerSave(): void {
+  window.clearTimeout(autosaveTimer)
+  if (!editorReady.value || loading.value || isNew.value || !dirty.value) return
+  autosaveTimer = window.setTimeout(async () => {
+    if (saving.value || autosaving.value) { scheduleServerSave(); return }
+    const savedMarkdown = markdown.value
+    const savedTags = [...tags.value]
+    autosaving.value = true
+    try {
+      const document = await documentsApi.update(path.value, savedMarkdown, savedTags, documentVersion.value)
+      documentVersion.value = document.version
+      serverSavedAt.value = new Date().toISOString()
+      if (markdown.value === savedMarkdown && tags.value.join('\n') === savedTags.join('\n')) {
+        originalMarkdown.value = document.markdown
+        originalTags.value = [...document.tags]
+        clearDraft()
+      } else {
+        scheduleServerSave()
+      }
+    } catch (saveError) {
+      error.value = saveError instanceof Error ? saveError.message : 'Automatic save failed. Your browser draft is still available.'
+    } finally {
+      autosaving.value = false
+    }
+  }, 1800)
+}
+
+async function openHistory(): Promise<void> {
+  error.value = ''
+  try {
+    revisions.value = await documentsApi.revisions(path.value)
+    showHistory.value = true
+  } catch (historyError) {
+    error.value = historyError instanceof Error ? historyError.message : 'Unable to load page history.'
+  }
+}
+
+async function restoreRevision(revision: Revision): Promise<void> {
+  if (!window.confirm(`Restore version ${revision.version}? The current page will remain in history.`)) return
+  saving.value = true
+  try {
+    const document = await documentsApi.restoreRevision(path.value, revision.id)
+    markdown.value = document.markdown
+    originalMarkdown.value = document.markdown
+    tags.value = [...document.tags]
+    originalTags.value = [...document.tags]
+    documentVersion.value = document.version
+    showHistory.value = false
+  } catch (restoreError) {
+    error.value = restoreError instanceof Error ? restoreError.message : 'Unable to restore this version.'
   } finally {
     saving.value = false
   }
@@ -340,10 +405,12 @@ onMounted(() => {
 })
 onBeforeUnmount(() => {
   window.clearTimeout(draftTimer)
+  window.clearTimeout(autosaveTimer)
   window.removeEventListener('atlas:folder-created', handleFolderCreated)
 })
 watch(() => route.fullPath, loadEditor, { immediate: true })
 watch([path, markdown, () => tags.value.join('\n')], scheduleDraft)
+watch([markdown, () => tags.value.join('\n')], scheduleServerSave)
 onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm('Discard your unsaved changes?'))
 </script>
 
@@ -357,11 +424,14 @@ onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm
           <p class="text-[10px] font-bold uppercase tracking-[0.16em] text-[#36c] dark:text-[#6ea6ff]">{{ isNew ? 'Create document' : 'Edit document' }}</p>
           <h1 class="wiki-heading mt-1 truncate text-2xl text-slate-950 dark:text-white">{{ isNew ? 'New knowledge page' : path }}</h1>
         </div>
-        <span v-if="dirty" class="text-xs font-medium text-amber-700 dark:text-amber-400">{{ draftSavedAt ? 'Draft saved in this browser' : 'Unsaved changes' }}</span>
+        <span v-if="autosaving" class="text-xs font-medium text-[#36c] dark:text-[#6ea6ff]">Saving…</span>
+        <span v-else-if="dirty" class="text-xs font-medium text-amber-700 dark:text-amber-400">{{ draftSavedAt ? 'Draft saved in this browser' : 'Unsaved changes' }}</span>
+        <span v-else-if="serverSavedAt" class="text-xs font-medium text-emerald-700 dark:text-emerald-400">Saved automatically</span>
+        <button v-if="!isNew" class="flex h-9 items-center gap-2 border border-slate-300 px-3 text-xs font-semibold text-slate-600 hover:bg-white dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800" type="button" @click="openHistory"><History :size="14" /> History</button>
         <button v-if="!isNew" class="flex h-9 items-center gap-2 border border-rose-300 px-3 text-xs font-semibold text-rose-700 hover:bg-rose-50 dark:border-rose-900 dark:text-rose-300 dark:hover:bg-rose-950/30" type="button" @click="showDeleteDialog = true">
           <Trash2 :size="14" /> Delete
         </button>
-        <button class="flex h-9 items-center gap-2 bg-[#36c] px-4 text-xs font-semibold text-white hover:bg-[#2a4b8d] disabled:opacity-60" type="button" :disabled="saving || loading" @click="save">
+        <button class="flex h-9 items-center gap-2 bg-[#36c] px-4 text-xs font-semibold text-white hover:bg-[#2a4b8d] disabled:opacity-60" type="button" :disabled="saving || autosaving || loading" @click="save">
           <LoaderCircle v-if="saving" :size="15" class="animate-spin" />
           <Save v-else :size="15" />
           {{ isNew ? 'Publish page' : 'Save changes' }}
@@ -406,7 +476,7 @@ onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm
               </span>
               <input id="document-tags" v-model="tagInput" class="h-6 min-w-32 flex-1 bg-transparent px-1 text-xs text-slate-800 outline-none placeholder:text-slate-400 dark:text-slate-200 dark:placeholder:text-slate-600" type="text" maxlength="128" placeholder="Add tags, then press Enter" @keydown="handleTagKeydown" @blur="addTag" />
             </div>
-            <p class="mt-1.5 text-[11px] text-slate-500 dark:text-slate-500">Tags are saved inside the Markdown file and normalized to lowercase slugs.</p>
+            <p class="mt-1.5 text-[11px] text-slate-500 dark:text-slate-500">Tags are stored with the page and normalized to lowercase slugs.</p>
           </div>
         </div>
 
@@ -429,7 +499,7 @@ onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm
               <button class="editor-tool shrink-0" title="Link (Ctrl+K)" type="button" @click="wrapSelection('[', '](https://)', 'link text')"><Link :size="15" /></button>
               <button class="editor-tool shrink-0" title="Image" type="button" @click="wrapSelection('![', '](images/example.png)', 'image description')"><Image :size="15" /></button>
               <button class="editor-tool shrink-0" title="Upload image or file" type="button" :disabled="uploading" @click="fileInput?.click()"><LoaderCircle v-if="uploading" :size="15" class="animate-spin" /><UploadCloud v-else :size="15" /></button>
-              <input ref="fileInput" class="hidden" type="file" accept=".png,.jpg,.jpeg,.gif,.webp,.svg,.pdf,.txt,.csv,.json,.yaml,.yml,.zip" @change="chooseFile" />
+              <input ref="fileInput" class="hidden" type="file" accept=".png,.jpg,.jpeg,.gif,.webp,.pdf,.txt,.csv,.json,.yaml,.yml,.zip" @change="chooseFile" />
               <button class="editor-tool shrink-0" title="Bulleted list" type="button" @click="insertLine('- ', 'List item')"><List :size="15" /></button>
               <button class="editor-tool shrink-0" title="Numbered list" type="button" @click="insertLine('1. ', 'List item')"><ListOrdered :size="15" /></button>
               <button class="editor-tool shrink-0" title="Task list" type="button" @click="insertLine('- [ ] ', 'Task item')"><CheckSquare :size="15" /></button>
@@ -464,7 +534,7 @@ onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm
         <div class="flex items-start justify-between gap-4">
           <div>
             <h2 id="delete-title" class="wiki-heading text-xl text-slate-950 dark:text-white">Delete this document?</h2>
-            <p class="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">This permanently removes <strong>{{ path }}</strong> from the filesystem.</p>
+            <p class="mt-2 text-sm leading-6 text-slate-500 dark:text-slate-400">This moves <strong>{{ path }}</strong> to Trash, where an editor can restore it.</p>
           </div>
           <button class="p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" type="button" aria-label="Close" @click="showDeleteDialog = false"><X :size="18" /></button>
         </div>
@@ -472,6 +542,22 @@ onBeforeRouteLeave(() => allowNavigation.value || !dirty.value || window.confirm
           <button class="h-9 border border-slate-300 px-4 text-xs font-semibold dark:border-slate-700" type="button" @click="showDeleteDialog = false">Cancel</button>
           <button class="flex h-9 items-center gap-2 bg-rose-700 px-4 text-xs font-semibold text-white hover:bg-rose-800" type="button" :disabled="saving" @click="removeDocument"><Trash2 :size="14" /> Delete file</button>
         </div>
+      </section>
+    </div>
+
+    <div v-if="showHistory" class="fixed inset-0 z-50 grid place-items-center bg-black/60 p-5" role="dialog" aria-modal="true" aria-labelledby="history-title" @click.self="showHistory = false">
+      <section class="w-full max-w-lg border border-slate-300 bg-white p-6 shadow-xl dark:border-slate-700 dark:bg-[#111315]">
+        <div class="flex items-start justify-between gap-4">
+          <div><h2 id="history-title" class="wiki-heading text-xl text-slate-950 dark:text-white">Version history</h2><p class="mt-2 text-sm text-slate-500 dark:text-slate-400">Every saved version remains recoverable.</p></div>
+          <button class="p-1 text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800" type="button" aria-label="Close" @click="showHistory = false"><X :size="18" /></button>
+        </div>
+        <ul class="mt-5 max-h-[55vh] overflow-y-auto border border-slate-200 dark:border-slate-800">
+          <li v-for="revision in revisions" :key="revision.id" class="flex items-center gap-4 border-b border-slate-200 px-4 py-3 last:border-b-0 dark:border-slate-800">
+            <History :size="15" class="shrink-0 text-slate-400" />
+            <div class="min-w-0 flex-1"><p class="text-sm font-semibold">Version {{ revision.version }} · {{ revision.reason }}</p><p class="mt-0.5 truncate text-[11px] text-slate-500">{{ revision.createdBy }} · {{ new Date(revision.createdAt).toLocaleString() }}</p></div>
+            <button class="h-8 border border-slate-300 px-3 text-xs font-semibold hover:border-[#36c] hover:text-[#36c] disabled:opacity-50 dark:border-slate-700" type="button" :disabled="revision.version === documentVersion || saving" @click="restoreRevision(revision)">Restore</button>
+          </li>
+        </ul>
       </section>
     </div>
   </div>

@@ -1,6 +1,16 @@
-# Fastify Atlas Wiki
+# Atlas Wiki
 
-A Vue wiki served by Fastify, with password-protected editing and persistent SQLite storage.
+A self-hosted collaborative knowledge base built with Vue and Fastify. Reading is public; named accounts with administrator, editor, or viewer roles control workspace access.
+
+## Features
+
+- Markdown pages with live preview, code highlighting, tables, task lists, tags, backlinks, and broken-link reporting
+- Named team accounts with `admin`, `editor`, and `viewer` roles
+- Conflict-safe editing, complete page revision history, and recoverable Trash
+- Indexed SQLite FTS5 search
+- Validated file uploads, CSRF protection, rate-limited sign-in, secure session cookies, and browser security headers
+- Responsive navigation, favorites, pinned pages, dark mode, and local draft recovery
+- Single-file production bundle, Docker health check, persistent storage, and verified live backups
 
 ## Requirements
 
@@ -53,13 +63,12 @@ Settings can be changed in `.env`:
 - `PORT` defaults to `8000`
 - `DATABASE_PATH` defaults to `./data/atlas.sqlite`
 - `LOG_LEVEL` defaults to `warn`
-- `ADMIN_PASSWORD` initializes the editing password on the first startup and must contain at least 12 characters
+- `ADMIN_USERNAME` initializes the first administrator username and defaults to `admin`
+- `ADMIN_PASSWORD` initializes the first administrator password and must contain at least 12 characters; startup fails when it is missing
 - `SESSION_DURATION_HOURS` defaults to `12`
 - `COOKIE_SECURE` should be `true` when the application is served through HTTPS
 
-Reading is public, while editing and every write API require an unlocked session.
-The initial password is stored only as a scrypt hash in SQLite; changing
-`ADMIN_PASSWORD` after the first startup does not replace the stored password.
-Replace the placeholder value in `.env` with your previous password before the
-first authenticated startup.
+Passwords are stored only as salted scrypt hashes. Changing `ADMIN_PASSWORD` after the first startup does not replace the database credential. Administrators can create named team accounts from **Settings**. Deleted pages can be restored there, and editors can restore earlier versions from the editor's **History** dialog.
+
+This release remains a shared knowledge workspace rather than a multi-tenant SaaS. Organizations requiring private per-customer workspaces, offline sync, or simultaneous cursor-level co-editing should add those capabilities before offering untrusted public sign-up. See [SECURITY.md](SECURITY.md) and [ROADMAP.md](ROADMAP.md).
 The default host keeps the server local to this computer.

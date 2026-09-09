@@ -14,7 +14,8 @@ services:
       PORT: 8000
       DATABASE_PATH: /app/data/atlas.sqlite
       BACKUP_DIR: /app/backups
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-1q2w1q2w1q2w1q2w}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD in .env before starting Atlas Wiki}
       SESSION_DURATION_HOURS: ${SESSION_DURATION_HOURS:-12}
       COOKIE_SECURE: ${COOKIE_SECURE:-false}
       LOG_LEVEL: ${LOG_LEVEL:-warn}

@@ -15,7 +15,9 @@
     "build": "npm run build:client && npm run build:embed && npm run build:server",
     "start": "node --disable-warning=ExperimentalWarning dist/server.cjs",
     "backup": "node --disable-warning=ExperimentalWarning scripts/backup.mjs",
+    "pretype-check": "npm run build:client && npm run build:embed",
     "type-check": "vue-tsc --noEmit -p tsconfig.json",
+    "pretest": "npm run build:client && npm run build:embed",
     "test": "node --disable-warning=ExperimentalWarning --import tsx --test tests/**/*.test.ts"
   },
   "dependencies": {

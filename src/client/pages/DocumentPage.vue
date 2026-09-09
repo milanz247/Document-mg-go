@@ -71,7 +71,7 @@ async function loadDocument(): Promise<void> {
     if (requestedPath.value.toLowerCase() === 'index.md' && requestError instanceof ApiError && requestError.status === 404) {
       showWelcome.value = true
       reportHomeFallback(true)
-      window.document.title = "Welcome - Milan's Wiki"
+      window.document.title = 'Welcome - Atlas Wiki'
       return
     }
     notFound.value = requestError instanceof ApiError && requestError.status === 404
@@ -110,7 +110,7 @@ onBeforeUnmount(() => {
       <div class="border-b border-slate-200 px-6 py-7 dark:border-slate-800 sm:px-9 sm:py-9">
         <span class="grid size-11 place-items-center bg-[#eef3ff] text-[#36c] dark:bg-slate-800 dark:text-[#6ea6ff]"><BookOpen :size="20" /></span>
         <p class="mt-6 text-[10px] font-bold uppercase tracking-[0.18em] text-[#36c] dark:text-[#6ea6ff]">Documentation workspace</p>
-        <h1 class="wiki-heading mt-2 text-3xl text-slate-950 dark:text-white sm:text-4xl">Welcome to Milan's Wiki</h1>
+        <h1 class="wiki-heading mt-2 text-3xl text-slate-950 dark:text-white sm:text-4xl">Welcome to Atlas Wiki</h1>
         <p class="mt-3 max-w-2xl text-sm leading-7 text-slate-500 dark:text-slate-400">Choose a document from Contents, or use the search bar to quickly find a technical note.</p>
       </div>
       <div class="grid grid-cols-2 divide-x divide-slate-200 dark:divide-slate-800">
@@ -190,7 +190,7 @@ onBeforeUnmount(() => {
     </section>
 
     <footer v-if="document || showWelcome" class="mt-8 border-t border-slate-200 py-5 text-center text-[11px] tracking-wide text-slate-400 dark:border-slate-800 dark:text-slate-500">
-      Developed by <span class="font-semibold text-slate-600 dark:text-slate-300">Milan Madusanka</span>
+      Powered by <span class="font-semibold text-slate-600 dark:text-slate-300">Atlas Wiki</span>
     </footer>
   </div>
 </template>

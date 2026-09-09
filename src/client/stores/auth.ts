@@ -24,10 +24,10 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  async function unlock(password: string): Promise<void> {
+  async function unlock(username: string, password: string): Promise<void> {
     loading.value = true
     try {
-      const session = await authApi.unlock(password)
+      const session = await authApi.unlock(username, password)
       user.value = session.user
       setCSRFToken(session.csrfToken)
       initialized.value = true

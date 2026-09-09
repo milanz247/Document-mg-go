@@ -17,6 +17,8 @@ export interface DocumentResponse {
   tags: string[]
   markdown: string
   headings: Heading[]
+  version: number
+  updatedAt: string
 }
 
 export interface SearchResult {
@@ -52,11 +54,28 @@ export interface DocumentInsights {
 }
 
 export interface AuthUser {
+  id: number
   username: string
+  role: 'admin' | 'editor' | 'viewer'
 }
 
 export interface AuthSession {
   user: AuthUser
   csrfToken: string
   expiresAt: string
+}
+
+export interface Revision {
+  id: number
+  version: number
+  path: string
+  reason: string
+  createdBy: string
+  createdAt: string
+}
+
+export interface TrashItem {
+  path: string
+  title: string
+  deletedAt: string
 }

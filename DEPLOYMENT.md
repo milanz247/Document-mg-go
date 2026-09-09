@@ -31,6 +31,7 @@ private password of at least 12 characters:
 
 ```dotenv
 ADMIN_PASSWORD=use-a-long-private-password-here
+ADMIN_USERNAME=admin
 COOKIE_SECURE=false
 ```
 
@@ -41,6 +42,8 @@ docker compose up -d --build
 docker compose ps
 docker compose logs --tail=100 atlas-wiki
 ```
+
+Compose deliberately refuses to start if `ADMIN_PASSWORD` is missing. After signing in, create a separate named account for each editor from **Settings**; do not share the administrator credential.
 
 The default published address is `127.0.0.1:8000`, suitable for an HTTPS
 reverse proxy on the same server. To expose the port directly, add these values

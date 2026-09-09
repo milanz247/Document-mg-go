@@ -1,4 +1,4 @@
-import type { AssetUpload, AuthSession, DocumentInsights, DocumentResponse, FolderResponse, NavigationNode, SearchResult } from '../types/documents'
+import type { AssetUpload, AuthSession, AuthUser, DocumentInsights, DocumentResponse, FolderResponse, NavigationNode, Revision, SearchResult, TrashItem } from '../types/documents'
 
 export class ApiError extends Error {
   constructor(
@@ -44,11 +44,19 @@ async function request<T>(url: string, options: RequestInit = {}): Promise<T> {
 
 export const authApi = {
   me: () => request<AuthSession>('/api/auth/me'),
-  unlock: (password: string) => request<AuthSession>('/api/auth/unlock', {
+  unlock: (username: string, password: string) => request<AuthSession>('/api/auth/unlock', {
     method: 'POST',
-    body: JSON.stringify({ password }),
+    body: JSON.stringify({ username, password }),
   }),
   lock: () => request<void>('/api/auth/lock', { method: 'POST' }),
+  users: () => request<AuthUser[]>('/api/users'),
+  createUser: (username: string, password: string, role: AuthUser['role']) => request<AuthUser>('/api/users', {
+    method: 'POST', body: JSON.stringify({ username, password, role }),
+  }),
+  deleteUser: (username: string) => request<void>(`/api/users?username=${encodeURIComponent(username)}`, { method: 'DELETE' }),
+  changePassword: (currentPassword: string, newPassword: string) => request<void>('/api/auth/password', {
+    method: 'POST', body: JSON.stringify({ currentPassword, newPassword }),
+  }),
 }
 
 export const documentsApi = {
@@ -65,9 +73,9 @@ export const documentsApi = {
     method: 'POST',
     body: JSON.stringify({ path, markdown, tags }),
   }),
-  update: (path: string, markdown: string, tags: string[]) => request<DocumentResponse>('/api/document', {
+  update: (path: string, markdown: string, tags: string[], version: number) => request<DocumentResponse>('/api/document', {
     method: 'PUT',
-    body: JSON.stringify({ path, markdown, tags }),
+    body: JSON.stringify({ path, markdown, tags, version }),
   }),
   createFolder: (path: string) => request<FolderResponse>('/api/folders', {
     method: 'POST',
@@ -87,4 +95,13 @@ export const documentsApi = {
       body: file,
     })
   },
+  revisions: (path: string) => request<Revision[]>(`/api/revisions?path=${encodeURIComponent(path)}`),
+  restoreRevision: (path: string, revisionId: number) => request<DocumentResponse>('/api/revisions/restore', {
+    method: 'POST', body: JSON.stringify({ path, revisionId }),
+  }),
+  trash: () => request<TrashItem[]>('/api/trash'),
+  restoreDeleted: (path: string) => request<DocumentResponse>('/api/trash/restore', {
+    method: 'POST', body: JSON.stringify({ path }),
+  }),
+  purgeDeleted: (path: string) => request<void>(`/api/trash?path=${encodeURIComponent(path)}`, { method: 'DELETE' }),
 }

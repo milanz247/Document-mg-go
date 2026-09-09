@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
-import { Command, LockKeyhole, Menu, Moon, RefreshCw, Search, ShieldCheck, Sun } from '@lucide/vue'
+import { Command, LockKeyhole, Menu, Moon, RefreshCw, Search, Settings, ShieldCheck, Sun } from '@lucide/vue'
 import { useRoute, useRouter } from 'vue-router'
 import UnlockEditingDialog from '../auth/UnlockEditingDialog.vue'
 import CreateFolderDialog from '../folders/CreateFolderDialog.vue'
@@ -127,7 +127,7 @@ onBeforeUnmount(() => {
             M
           </span>
           <span class="hidden min-w-0 sm:block">
-            <span class="wiki-wordmark block truncate text-[17px] leading-5 tracking-wide text-slate-950 dark:text-white">Milan's Wiki</span>
+            <span class="wiki-wordmark block truncate text-[17px] leading-5 tracking-wide text-slate-950 dark:text-white">Atlas Wiki</span>
             <!-- <span class="hidden truncate text-[9px] font-medium uppercase tracking-[0.14em] text-slate-500 dark:text-slate-500 md:block">Technical knowledge base</span> -->
           </span>
         </RouterLink>
@@ -161,7 +161,8 @@ onBeforeUnmount(() => {
         >
           <RefreshCw :size="15" :class="{ 'animate-spin': documents.navigationLoading }" />
         </button>
-        <span v-if="auth.isAuthenticated" class="hidden items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 2xl:flex"><ShieldCheck :size="14" /> Editing unlocked</span>
+        <span v-if="auth.user" class="hidden items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400 2xl:flex"><ShieldCheck :size="14" /> {{ auth.user.username }} · {{ auth.user.role }}</span>
+        <RouterLink v-if="auth.user && auth.user.role !== 'viewer'" class="grid size-9 shrink-0 place-items-center border border-slate-200 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white" to="/settings" title="Workspace settings" aria-label="Workspace settings"><Settings :size="16" /></RouterLink>
         <button
           class="grid size-9 shrink-0 place-items-center border border-slate-200 text-slate-600 transition hover:bg-slate-100 hover:text-slate-950 dark:border-slate-700 dark:text-slate-300 dark:hover:bg-slate-800 dark:hover:text-white"
           type="button"
